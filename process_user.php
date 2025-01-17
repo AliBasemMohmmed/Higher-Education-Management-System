@@ -9,6 +9,24 @@ try {
     $pdo->beginTransaction();
 
     if (isset($_POST['update_user'])) {
+        // التحقق من وجود الجامعة
+        if (!empty($_POST['university_id'])) {
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM universities WHERE id = ?");
+            $stmt->execute([$_POST['university_id']]);
+            if ($stmt->fetchColumn() == 0) {
+                throw new Exception("الجامعة المحددة غير موجودة");
+            }
+        }
+
+        // التحقق من وجود الكلية إذا تم تحديدها
+        if (!empty($_POST['college_id'])) {
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM colleges WHERE id = ? AND university_id = ?");
+            $stmt->execute([$_POST['college_id'], $_POST['university_id']]);
+            if ($stmt->fetchColumn() == 0) {
+                throw new Exception("الكلية المحددة غير موجودة أو لا تنتمي للجامعة المحددة");
+            }
+        }
+
         // التحقق من عدم تكرار اسم المستخدم والبريد الإلكتروني
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
@@ -33,7 +51,8 @@ try {
                 email = :email,
                 role = :role,
                 university_id = :university_id,
-                college_id = :college_id";
+                college_id = :college_id,
+                updated_at = CURRENT_TIMESTAMP";
 
         // إضافة تحديث كلمة المرور إذا تم تقديمها
         if (!empty($_POST['password'])) {
@@ -49,8 +68,8 @@ try {
             'full_name' => $_POST['full_name'],
             'email' => $_POST['email'],
             'role' => $_POST['role'],
-            'university_id' => $_POST['university_id'],
-            'college_id' => $_POST['college_id'] ?: null,
+            'university_id' => !empty($_POST['university_id']) ? $_POST['university_id'] : null,
+            'college_id' => !empty($_POST['college_id']) ? $_POST['college_id'] : null,
             'user_id' => $_POST['user_id']
         ];
 

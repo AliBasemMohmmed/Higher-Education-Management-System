@@ -445,7 +445,9 @@ include 'header.php';
                 <label class="form-label">الجامعة</label>
                 <select name="university_id" id="edit_university_id" class="form-control" required>
                   <option value="">اختر الجامعة</option>
-                  <?php foreach ($universities as $university): ?>
+                  <?php
+                  $universities = $pdo->query("SELECT id, name FROM universities ORDER BY name")->fetchAll();
+                  foreach ($universities as $university): ?>
                     <option value="<?php echo $university['id']; ?>"><?php echo htmlspecialchars($university['name']); ?></option>
                   <?php endforeach; ?>
                 </select>
@@ -521,10 +523,13 @@ function editUser(userId) {
             document.getElementById('edit_full_name').value = user.full_name;
             document.getElementById('edit_email').value = user.email;
             document.getElementById('edit_role').value = user.role;
-            document.getElementById('edit_university_id').value = user.university_id;
+            document.getElementById('edit_university_id').value = user.university_id || '';
             
             // تحديث قائمة الكليات وتحديد الكلية المختارة
-            if (user.university_id) {
+            if (user.university_id && user.role === 'unit') {
+                const collegeDiv = document.getElementById('edit_college_id').closest('.mb-3');
+                collegeDiv.style.display = 'block';
+                
                 fetch(`get_colleges.php?university_id=${user.university_id}`)
                     .then(response => response.json())
                     .then(colleges => {
@@ -539,7 +544,12 @@ function editUser(userId) {
                             }
                             collegeSelect.appendChild(option);
                         });
+                        collegeSelect.required = true;
                     });
+            } else {
+                const collegeDiv = document.getElementById('edit_college_id').closest('.mb-3');
+                collegeDiv.style.display = user.role === 'unit' ? 'block' : 'none';
+                document.getElementById('edit_college_id').value = '';
             }
             
             // عرض النافذة المنبثقة
@@ -552,6 +562,22 @@ function updateUser() {
     const formData = new FormData(document.getElementById('editUserForm'));
     formData.append('update_user', '1');
     
+    // التحقق من القيم قبل الإرسال
+    const role = document.getElementById('edit_role').value;
+    const universityId = document.getElementById('edit_university_id').value;
+    const collegeId = document.getElementById('edit_college_id').value;
+    
+    // إذا كان نوع المستخدم وحدة، تأكد من اختيار الكلية
+    if (role === 'unit' && !collegeId) {
+        alert('يجب اختيار الكلية لمستخدم الوحدة');
+        return;
+    }
+    
+    // إذا كان نوع المستخدم ليس وحدة، احذف قيمة الكلية
+    if (role !== 'unit') {
+        formData.set('college_id', '');
+    }
+    
     fetch('process_user.php', {
         method: 'POST',
         body: formData
@@ -559,6 +585,8 @@ function updateUser() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // إغلاق النافذة المنبثقة
+            bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
             // تحديث الجدول
             location.reload();
         } else {
@@ -623,7 +651,7 @@ document.getElementById('edit_university_id').addEventListener('change', functio
             .then(response => response.json())
             .then(colleges => {
                 if (colleges.length === 0) {
-                    collegeSelect.innerHTML += '<option value="" disabled>لا توجد كليات متاحة</option>';
+                    collegeSelect.innerHTML = '<option value="">لا توجد كليات متاحة</option>';
                 } else {
                     colleges.forEach(college => {
                         const option = document.createElement('option');
