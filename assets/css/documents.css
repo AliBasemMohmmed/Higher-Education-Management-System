@@ -1,0 +1,154 @@
+.context-menu {
+  position: fixed;
+  display: none;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  padding: 8px 0;
+  z-index: 9999;
+  min-width: 200px;
+  direction: rtl;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s;
+  color: #212529;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.context-menu-item:hover {
+  background-color: #f8f9fa;
+}
+
+.context-menu-item:active {
+  background-color: #e9ecef;
+}
+
+.context-menu-item i {
+  width: 20px;
+  text-align: center;
+  color: #6c757d;
+}
+
+.document-item.archived {
+  opacity: 0.7;
+}
+
+.modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+#receiversList {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.receiver-group {
+  margin-bottom: 15px;
+}
+
+.receiver-group h6 {
+  margin-bottom: 10px;
+  color: #666;
+}
+
+.receiver-item {
+  margin-bottom: 5px;
+}
+
+.toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1050;
+}
+
+.table tbody tr {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.table tbody tr:active {
+  transform: translateY(0);
+}
+
+.table tbody tr.selected {
+  background-color: #e3f2fd !important;
+}
+
+/* تحسين تأثير التحويم على عمود الإجراءات */
+.table tbody tr td:last-child {
+  position: relative;
+}
+
+.table tbody tr.selected td:last-child::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right: 5px solid #ddd;
+}
+
+/* تحسين مظهر خلية الإجراءات */
+.actions-cell {
+    position: relative;
+    min-width: 50px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.actions-cell i {
+    color: #6c757d;
+    transition: color 0.2s;
+}
+
+.actions-cell:hover i {
+    color: #000;
+}
+
+/* تنسيق الصف المحدد */
+.table tbody tr.selected {
+    background-color: #e3f2fd !important;
+}
+/* تحسين تفاعلية الجدول */
+.table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* تنسيق أزرار الفلتر */
+.filter-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+/* تنسيق رسائل النظام */
+.toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+}
+
+.table tbody tr {
+    cursor: context-menu;
+}
+

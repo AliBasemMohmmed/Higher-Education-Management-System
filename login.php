@@ -1,24 +1,68 @@
 <?php
+require_once 'functions.php';
+require_once 'auth.php';
 require_once 'config.php';
-session_start();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-  $username = $_POST['username'];
-  $password = $_POST['password'];
-  
-  $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
-  $stmt->execute([$username]);
-  $user = $stmt->fetch();
-  
-  if ($user && password_verify($password, $user['password'])) {
-    $_SESSION['user_id'] = $user['id'];
-    $_SESSION['user_role'] = $user['role'];
-    $_SESSION['user_name'] = $user['full_name'];
-    header('Location: index.php');
+// إذا كان المستخدم مسجل دخوله بالفعل، حوله إلى لوحة التحكم
+if (isset($_SESSION['user_id'])) {
+    header('Location: dashboard.php');
     exit;
-  } else {
-    $error = 'اسم المستخدم أو كلمة المرور غير صحيحة';
-  }
+}
+
+// التحقق من محاولة تسجيل الدخول
+$error = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        // التحقق من وجود البيانات المطلوبة
+        if (empty($_POST['username']) || empty($_POST['password'])) {
+            throw new Exception('يرجى إدخال اسم المستخدم وكلمة المرور');
+        }
+        
+        $username = trim($_POST['username']);
+        $password = $_POST['password'];
+        
+        // التحقق من المستخدم
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
+        
+        if (!$user || !password_verify($password, $user['password'])) {
+            throw new Exception('اسم المستخدم أو كلمة المرور غير صحيحة');
+        }
+        
+        // تسجيل الدخول بنجاح
+        $_SESSION['user_id'] = $user['id'];
+        setUserEntityInfo($user['id']);
+        $_SESSION['user_role'] = $user['role'];
+        $_SESSION['user_name'] = $user['full_name'];
+        
+        // تسجيل عملية تسجيل الدخول
+        $logLogin = $pdo->prepare("
+          INSERT INTO activity_log (user_id, action, entity_type, details) 
+          VALUES (?, 'login', 'user', ?)
+        ");
+        $logLogin->execute([
+          $user['id'], 
+          json_encode([
+            'ip' => $_SERVER['REMOTE_ADDR'],
+            'user_agent' => $_SERVER['HTTP_USER_AGENT']
+          ])
+        ]);
+        
+        // تحديث آخر تسجيل دخول
+        $updateLastLogin = $pdo->prepare("
+          UPDATE users 
+          SET last_login = NOW() 
+          WHERE id = ?
+        ");
+        $updateLastLogin->execute([$user['id']]);
+        
+        header('Location: dashboard.php');
+        exit;
+        
+    } catch (Exception $e) {
+        $error = $e->getMessage();
+    }
 }
 ?>
 

@@ -1,3 +1,12 @@
+
+<style>
+  footer {
+    margin-top: auto;
+    width: 100%;
+    background-color: #f8f9fa;
+    padding: 1rem 0;
+  }
+</style>
 <footer class="bg-light text-center text-lg-start mt-4">
   <div class="text-center p-3">
     جميع الحقوق محفوظة © <?php echo date('Y'); ?> - وزارة التعليم العالي والبحث العلمي
