@@ -25,6 +25,9 @@ try {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@sweetalert2/theme-bootstrap-4/bootstrap-4.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .navbar { background-color: #004d40; }
@@ -40,6 +43,35 @@ try {
             background-color: #dc3545;
             color: white;
             font-size: 0.75rem;
+        }
+        /* تنسيقات إضافية للأزرار */
+        .btn-outline-primary, .btn-outline-danger {
+            transition: all 0.3s ease;
+        }
+        
+        .btn-outline-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0,123,255,0.2);
+        }
+        
+        .btn-outline-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(220,53,69,0.2);
+        }
+
+        /* تنسيق مربعات الحوار */
+        .swal2-popup {
+            border-radius: 15px;
+        }
+
+        .swal2-title {
+            font-weight: 600 !important;
+        }
+
+        .swal2-confirm, .swal2-cancel {
+            border-radius: 20px !important;
+            padding: 8px 25px !important;
+            font-weight: 500 !important;
         }
     </style>
 </head>

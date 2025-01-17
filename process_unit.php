@@ -3,123 +3,131 @@ require_once 'functions.php';
 require_once 'auth.php';
 requireLogin();
 
-// التحقق من الصلاحيات
-$userRole = $_SESSION['user_role'];
-$userEntityType = $_SESSION['entity_type'] ?? null;
-$userEntityId = $_SESSION['entity_id'] ?? null;
+header('Content-Type: application/json');
 
-if ($userRole !== 'admin' && $userEntityType !== 'division') {
-    die('غير مصرح لك بإدارة الوحدات');
+// التحقق من الصلاحيات
+if (!hasPermission('add_unit') && !hasPermission('edit_unit')) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'غير مصرح لك بإضافة أو تعديل الوحدات']);
+    exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        $pdo->beginTransaction();
+// التحقق من طريقة الطلب
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'طريقة الطلب غير صحيحة']);
+    exit;
+}
 
-        if (empty($_POST['name']) || empty($_POST['university_id']) || 
-            empty($_POST['college_id']) || empty($_POST['unit_manager_id'])) {
-            throw new Exception('جميع الحقول مطلوبة');
-        }
-
-        $name = trim($_POST['name']);
-        $universityId = $_POST['university_id'];
-        $collegeId = $_POST['college_id'];
-        $unitManagerId = $_POST['unit_manager_id'];
-        $description = trim($_POST['description'] ?? '');
-
-        // التحقق من صلاحية الوصول للجامعة والكلية
-        if ($userRole !== 'admin') {
-            $stmt = $pdo->prepare("
-                SELECT 1 
-                FROM colleges c
-                INNER JOIN university_divisions ud ON c.university_id = ud.university_id
-                INNER JOIN user_entities ue ON ud.id = ue.entity_id
-                WHERE c.id = ? 
-                AND c.university_id = ?
-                AND ue.user_id = ?
-                AND ue.entity_type = 'division'
-                AND ue.is_primary = 1
-            ");
-            $stmt->execute([$collegeId, $universityId, $_SESSION['user_id']]);
-            
-            if (!$stmt->fetch()) {
-                throw new Exception('غير مصرح لك بإضافة وحدات لهذه الكلية');
-            }
-        }
-
-        // إضافة وحدة جديدة
-        $stmt = $pdo->prepare("
-            INSERT INTO units (
-                name,
-                university_id,
-                college_id,
-                description,
-                created_at,
-                created_by
-            ) VALUES (
-                :name,
-                :university_id,
-                :college_id,
-                :description,
-                NOW(),
-                :created_by
-            )
-        ");
-        
-        $stmt->execute([
-            ':name' => $name,
-            ':university_id' => $universityId,
-            ':college_id' => $collegeId,
-            ':description' => $description,
-            ':created_by' => $_SESSION['user_id']
-        ]);
-
-        $unitId = $pdo->lastInsertId();
-
-        // تحديث جدول المستخدمين وإضافة مدير الوحدة
-        $stmt = $pdo->prepare("
-            UPDATE users 
-            SET university_id = :university_id,
-                role = 'unit',
-                updated_at = NOW()
-            WHERE id = :user_id
-        ");
-        
-        $stmt->execute([
-            ':university_id' => $universityId,
-            ':user_id' => $unitManagerId
-        ]);
-
-        // إضافة الانتماء للوحدة
-        $stmt = $pdo->prepare("
-            INSERT INTO user_entities (
-                user_id,
-                entity_id,
-                entity_type,
-                is_primary
-            ) VALUES (
-                :user_id,
-                :entity_id,
-                'unit',
-                1
-            )
-        ");
-        
-        $stmt->execute([
-            ':user_id' => $unitManagerId,
-            ':entity_id' => $unitId
-        ]);
-
-        $pdo->commit();
-        $_SESSION['success'] = 'تم إضافة الوحدة وتعيين مديرها بنجاح';
-        
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        error_log("خطأ في معالجة الوحدة: " . $e->getMessage());
-        $_SESSION['error'] = 'حدث خطأ: ' . $e->getMessage();
+// التحقق من البيانات المطلوبة
+$requiredFields = ['name', 'university_id', 'college_id', 'division_id'];
+foreach ($requiredFields as $field) {
+    if (!isset($_POST[$field]) || empty($_POST[$field])) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'جميع الحقول المطلوبة يجب تعبئتها']);
+        exit;
     }
 }
 
-header('Location: units.php');
-exit;
+$action = $_POST['action'] ?? '';
+$id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+$name = trim($_POST['name']);
+$universityId = (int)$_POST['university_id'];
+$collegeId = (int)$_POST['college_id'];
+$divisionId = (int)$_POST['division_id'];
+$description = trim($_POST['description'] ?? '');
+$isActive = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
+
+try {
+    // التحقق من صلاحية المستخدم للتعامل مع الجامعة المحددة
+    if ($_SESSION['user_role'] !== 'admin') {
+        $stmt = $pdo->prepare("
+            SELECT 1 
+            FROM user_entities ue 
+            INNER JOIN university_divisions ud ON ue.entity_id = ud.id 
+            WHERE ue.user_id = ? 
+            AND ue.entity_type = 'division' 
+            AND ue.is_primary = 1 
+            AND ud.university_id = ?
+        ");
+        $stmt->execute([$_SESSION['user_id'], $universityId]);
+        
+        if (!$stmt->fetch()) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'غير مصرح لك بالتعامل مع هذه الجامعة']);
+            exit;
+        }
+    }
+
+    // التحقق من وجود الوحدة في حالة التعديل
+    if ($action === 'edit' && $id > 0) {
+        $stmt = $pdo->prepare("SELECT id FROM units WHERE id = ?");
+        $stmt->execute([$id]);
+        if (!$stmt->fetch()) {
+            http_response_code(404);
+            echo json_encode(['success' => false, 'message' => 'الوحدة غير موجودة']);
+            exit;
+        }
+    }
+
+    // بدء المعاملة
+    $pdo->beginTransaction();
+
+    if ($action === 'edit' && $id > 0) {
+        // تحديث الوحدة
+        $stmt = $pdo->prepare("
+            UPDATE units 
+            SET name = ?, 
+                university_id = ?, 
+                college_id = ?, 
+                division_id = ?, 
+                description = ?, 
+                is_active = ?,
+                updated_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ");
+        $stmt->execute([
+            $name,
+            $universityId,
+            $collegeId,
+            $divisionId,
+            $description,
+            $isActive,
+            $_SESSION['user_id'],
+            $id
+        ]);
+        $message = 'تم تحديث الوحدة بنجاح';
+    } else {
+        // إضافة وحدة جديدة
+        $stmt = $pdo->prepare("
+            INSERT INTO units (
+                name, university_id, college_id, division_id, 
+                description, is_active, created_by, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ");
+        $stmt->execute([
+            $name,
+            $universityId,
+            $collegeId,
+            $divisionId,
+            $description,
+            $isActive,
+            $_SESSION['user_id']
+        ]);
+        $message = 'تمت إضافة الوحدة بنجاح';
+    }
+
+    // تأكيد المعاملة
+    $pdo->commit();
+
+    echo json_encode(['success' => true, 'message' => $message]);
+
+} catch (PDOException $e) {
+    // التراجع عن المعاملة في حالة حدوث خطأ
+    $pdo->rollBack();
+    error_log("خطأ في معالجة الوحدة: " . $e->getMessage());
+    http_response_code(500);
+    echo json_encode(['success' => false, 'message' => 'حدث خطأ أثناء معالجة البيانات']);
+}
 ?>
