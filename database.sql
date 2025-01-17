@@ -52,6 +52,7 @@ CREATE TABLE units (
 -- جدول الكتب والمراسلات
 CREATE TABLE documents (
   id INT PRIMARY KEY AUTO_INCREMENT,
+  document_id VARCHAR(50) UNIQUE NOT NULL,
   title VARCHAR(255) NOT NULL,
   content TEXT,
   file_path VARCHAR(255),
@@ -95,8 +96,22 @@ CREATE TABLE permissions (
   id INT PRIMARY KEY AUTO_INCREMENT,
   user_id INT NOT NULL,
   permission_name VARCHAR(50) NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id)
+  permission_type_id INT,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (permission_type_id) REFERENCES permission_types(id)
 );
+
+-- جدول أنواع الصلاحيات
+CREATE TABLE permission_types (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    entity_type ENUM('ministry', 'division', 'unit', 'all') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- إضافة فهرس على نوع الكيان
+CREATE INDEX idx_permission_types_entity ON permission_types(entity_type);
 
 -- إدخال بيانات تجريبية للمستخدمين
 INSERT INTO users (username, password, full_name, email, role, entity_id) VALUES
@@ -239,3 +254,12 @@ ADD COLUMN university_id INT AFTER role;
 -- إضافة المفتاح الأجنبي
 ALTER TABLE users
 ADD FOREIGN KEY (university_id) REFERENCES universities(id);
+
+-- إضافة بعض أنواع الصلاحيات الافتراضية
+INSERT INTO permission_types (name, description, entity_type) VALUES
+('إدارة المستندات', 'صلاحية إنشاء وتعديل وحذف المستندات', 'all'),
+('عرض المستندات', 'صلاحية عرض المستندات فقط', 'all'),
+('إدارة التقارير', 'صلاحية إنشاء وتعديل التقارير', 'unit'),
+('عرض التقارير', 'صلاحية عرض التقارير فقط', 'all'),
+('إدارة المستخدمين', 'صلاحية إدارة حسابات المستخدمين', 'ministry'),
+('إدارة الإعدادات', 'صلاحية تعديل إعدادات النظام', 'ministry');

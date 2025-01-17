@@ -179,6 +179,9 @@ try {
                         <li><a class="dropdown-item" href="system_monitor.php">
                             <i class="fas fa-desktop me-2"></i>مراقبة النظام
                         </a></li>
+                        <!-- <li><a class="dropdown-item" href="manage_permission_types.php">
+                            <i class="fas fa-key me-2"></i>إدارة نوع الصلاحيات
+                        </a></li> -->
                         <li><a class="dropdown-item" href="backup.php">
                             <i class="fas fa-database me-2"></i>النسخ الاحتياطي
                         </a></li>

@@ -14,6 +14,11 @@ include 'header.php';
         <div class="card-body">
             <form method="POST" action="process_document.php" enctype="multipart/form-data">
                 <div class="mb-3">
+                    <label class="form-label">معرف الكتاب</label>
+                    <input type="text" name="document_id" class="form-control" required>
+                </div>
+
+                <div class="mb-3">
                     <label class="form-label">عنوان الكتاب</label>
                     <input type="text" name="title" class="form-control" required>
                 </div>

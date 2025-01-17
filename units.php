@@ -59,22 +59,11 @@ include 'header.php';
                 </div>
                 <div class="mb-3">
                     <label class="form-label">الجامعة</label>
-                    <select name="university_id" class="form-control" id="university_select" required>
+                    <select name="university_id" id="university_select" class="form-control" required>
                         <option value="">اختر الجامعة</option>
                         <?php
-                        if ($userRole === 'admin') {
-                            $stmt = $pdo->query("SELECT * FROM universities ORDER BY name");
-                        } else {
-                            $stmt = $pdo->prepare("
-                                SELECT u.* 
-                                FROM universities u
-                                INNER JOIN university_divisions ud ON u.id = ud.university_id
-                                WHERE ud.id = ?
-                            ");
-                            $stmt->execute([$userDivisionId]);
-                        }
-                        
-                        while ($univ = $stmt->fetch()) {
+                        $universities = $pdo->query("SELECT * FROM universities ORDER BY name")->fetchAll();
+                        foreach ($universities as $univ) {
                             echo "<option value='{$univ['id']}'>{$univ['name']}</option>";
                         }
                         ?>
@@ -82,29 +71,14 @@ include 'header.php';
                 </div>
                 <div class="mb-3">
                     <label class="form-label">الكلية</label>
-                    <select name="college_id" class="form-control" id="college_select" required>
+                    <select name="college_id" id="college_select" class="form-control" required>
                         <option value="">اختر الكلية</option>
                     </select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">مدير الوحدة</label>
-                    <select name="unit_manager_id" class="form-control" required>
+                    <select name="unit_manager_id" id="unit_manager_select" class="form-control" required>
                         <option value="">اختر مدير الوحدة</option>
-                        <?php
-                        // جلب المستخدمين من نوع unit
-                        $userStmt = $pdo->prepare("
-                            SELECT u.id, u.full_name 
-                            FROM users u
-                            LEFT JOIN user_entities ue ON u.id = ue.user_id
-                            WHERE u.role = 'unit'
-                            AND (ue.id IS NULL OR ue.is_primary = 0)
-                            ORDER BY u.full_name
-                        ");
-                        $userStmt->execute();
-                        while ($user = $userStmt->fetch()) {
-                            echo "<option value='{$user['id']}'>{$user['full_name']}</option>";
-                        }
-                        ?>
                     </select>
                 </div>
                 <div class="mb-3">
@@ -219,21 +193,88 @@ include 'header.php';
 document.getElementById('university_select').addEventListener('change', function() {
     const universityId = this.value;
     const collegeSelect = document.getElementById('college_select');
+    const managerSelect = document.getElementById('unit_manager_select');
     
-    // تفريغ القائمة
+    // تفريغ القوائم
     collegeSelect.innerHTML = '<option value="">اختر الكلية</option>';
+    managerSelect.innerHTML = '<option value="">اختر مدير الوحدة</option>';
     
     if (universityId) {
-        // جلب الكليات حسب الجامعة المختارة
-        fetch(`get_colleges.php?university_id=${universityId}`)
-            .then(response => response.json())
+        // إظهار رسالة تحميل للكليات
+        collegeSelect.disabled = true;
+        collegeSelect.innerHTML = '<option value="">جاري التحميل...</option>';
+        
+        // جلب الكليات المتاحة
+        fetch(`get_available_colleges.php?university_id=${universityId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('حدث خطأ في جلب البيانات');
+                }
+                return response.json();
+            })
             .then(colleges => {
-                colleges.forEach(college => {
-                    const option = document.createElement('option');
-                    option.value = college.id;
-                    option.textContent = college.name;
-                    collegeSelect.appendChild(option);
-                });
+                collegeSelect.innerHTML = '<option value="">اختر الكلية</option>';
+                if (colleges.length === 0) {
+                    collegeSelect.innerHTML += '<option value="" disabled>لا توجد كليات متاحة</option>';
+                } else {
+                    colleges.forEach(college => {
+                        const option = document.createElement('option');
+                        option.value = college.id;
+                        option.textContent = college.name;
+                        collegeSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                collegeSelect.innerHTML = '<option value="">حدث خطأ في جلب البيانات</option>';
+            })
+            .finally(() => {
+                collegeSelect.disabled = false;
+            });
+    }
+});
+
+document.getElementById('college_select').addEventListener('change', function() {
+    const universityId = document.getElementById('university_select').value;
+    const collegeId = this.value;
+    const managerSelect = document.getElementById('unit_manager_select');
+    
+    // تفريغ القائمة
+    managerSelect.innerHTML = '<option value="">اختر مدير الوحدة</option>';
+    
+    if (collegeId) {
+        // إظهار رسالة تحميل
+        managerSelect.disabled = true;
+        managerSelect.innerHTML = '<option value="">جاري التحميل...</option>';
+        
+        // جلب المستخدمين حسب الجامعة والكلية
+        fetch(`get_unit_users.php?university_id=${universityId}&college_id=${collegeId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('حدث خطأ في جلب البيانات');
+                }
+                return response.json();
+            })
+            .then(users => {
+                managerSelect.innerHTML = '<option value="">اختر مدير الوحدة</option>';
+                if (users.length === 0) {
+                    managerSelect.innerHTML += '<option value="" disabled>لا يوجد مستخدمين متاحين</option>';
+                } else {
+                    users.forEach(user => {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = user.full_name;
+                        managerSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                managerSelect.innerHTML = '<option value="">حدث خطأ في جلب البيانات</option>';
+            })
+            .finally(() => {
+                managerSelect.disabled = false;
             });
     }
 });

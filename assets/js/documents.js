@@ -6,13 +6,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // تعريف خيارات القائمة
   const menuItems = {
-    archive: { icon: 'archive', text: 'أرشفة' },
-    comment: { icon: 'comment', text: 'إضافة تعليق' },
-    send: { icon: 'paper-plane', text: 'إرسال' },
-    sendMultiple: { icon: 'share', text: 'إرسال لعدة جهات' },
-    broadcast: { icon: 'broadcast-tower', text: 'تعميم' },
-    edit: { icon: 'edit', text: 'تعديل' },
-    delete: { icon: 'trash', text: 'حذف' }
+    archive: { icon: 'archive', text: 'أرشفة', permission: 'can_archive' },
+    comment: { icon: 'comment', text: 'إضافة تعليق', permission: 'can_comment' },
+    send: { icon: 'paper-plane', text: 'إرسال', permission: 'can_send' },
+    sendMultiple: { icon: 'share', text: 'إرسال لعدة جهات', permission: 'can_send' },
+    broadcast: { icon: 'broadcast-tower', text: 'تعميم', permission: 'can_broadcast' },
+    edit: { icon: 'edit', text: 'تعديل', permission: 'can_edit' },
+    delete: { icon: 'trash', text: 'حذف', permission: 'can_delete' }
   };
 
   // تحديث معالج النقر على عمود الإجراءات
@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       const row = this.parentElement;
       const docId = row.querySelector('td:first-child').textContent;
+      const docStatus = row.querySelector('.badge').textContent.trim();
       
       // إزالة التحديد من جميع الصفوف
       document.querySelectorAll('.table tbody tr').forEach(r => r.classList.remove('selected'));
@@ -30,21 +31,49 @@ document.addEventListener('DOMContentLoaded', function() {
       // إضافة تحديد للصف الحالي
       row.classList.add('selected');
       
-      // إنشاء محتوى القائمة
+      // إنشاء محتوى القائمة مع مراعاة حالة الوثيقة
       contextMenu.innerHTML = Object.entries(menuItems)
+        .filter(([action, { permission }]) => {
+          // التحقق من الصلاحيات وحالة الوثيقة
+          if (docStatus === 'مؤرشف' && action !== 'comment') return false;
+          if (docStatus === 'تم الإرسال' && ['edit', 'delete'].includes(action)) return false;
+          return true;
+        })
         .map(([action, { icon, text }]) => `
-          <div class="context-menu-item" data-action="${action}" data-id="${docId}">
+          <div class="context-menu-item ${getMenuItemClass(action, docStatus)}" 
+               data-action="${action}" 
+               data-id="${docId}">
             <i class="fas fa-${icon}"></i> ${text}
           </div>
         `).join('');
       
-      // تحديد موقع القائمة فوق الصف
+      // تحديد موقع القائمة
       const cellRect = this.getBoundingClientRect();
+      const menuHeight = contextMenu.offsetHeight;
+      const windowHeight = window.innerHeight;
+      
       contextMenu.style.display = 'block';
-      contextMenu.style.left = (cellRect.left) + 'px';
-      contextMenu.style.top = (window.scrollY + cellRect.top - contextMenu.offsetHeight - 5) + 'px';
+      
+      // تحديد ما إذا كان يجب عرض القائمة فوق أو تحت الخلية
+      const spaceBelow = windowHeight - cellRect.bottom;
+      const spaceAbove = cellRect.top;
+      
+      if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
+        contextMenu.style.top = (window.scrollY + cellRect.bottom + 5) + 'px';
+      } else {
+        contextMenu.style.top = (window.scrollY + cellRect.top - menuHeight - 5) + 'px';
+      }
+      
+      contextMenu.style.left = cellRect.left + 'px';
     });
   });
+
+  // دالة مساعدة لتحديد صنف عنصر القائمة
+  function getMenuItemClass(action, docStatus) {
+    if (docStatus === 'مؤرشف' && action !== 'comment') return 'disabled';
+    if (docStatus === 'تم الإرسال' && ['edit', 'delete'].includes(action)) return 'disabled';
+    return '';
+  }
 
   // إخفاء القائمة فقط عند النقر خارج القائمة والجدول
   document.addEventListener('click', function(e) {
@@ -57,36 +86,44 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // معالجة النقر على عناصر القائمة
+  // تحديث معالج النقر على عناصر القائمة
   contextMenu.addEventListener('click', async function(e) {
     const item = e.target.closest('.context-menu-item');
-    if (!item) return;
+    if (!item || item.classList.contains('disabled')) return;
 
     const action = item.dataset.action;
     const docId = item.dataset.id;
 
-    switch(action) {
-      case 'archive':
-        await archiveDocument(docId);
-        break;
-      case 'comment':
-        await showCommentDialog(docId);
-        break;
-      case 'send':
-        await showSendDialog(docId, 'single');
-        break;
-      case 'sendMultiple':
-        await showSendDialog(docId, 'multiple');
-        break;
-      case 'broadcast':
-        await showSendDialog(docId, 'broadcast');
-        break;
-      case 'edit':
-        window.location.href = `edit_document.php?id=${docId}`;
-        break;
-      case 'delete':
-        await deleteDocument(docId);
-        break;
+    try {
+      switch(action) {
+        case 'archive':
+          await archiveDocument(docId);
+          break;
+        case 'comment':
+          await showCommentDialog(docId);
+          break;
+        case 'send':
+          await showSendDialog(docId, 'single');
+          break;
+        case 'sendMultiple':
+          await showSendDialog(docId, 'multiple');
+          break;
+        case 'broadcast':
+          await showSendDialog(docId, 'broadcast');
+          break;
+        case 'edit':
+          window.location.href = `edit_document.php?id=${docId}`;
+          break;
+        case 'delete':
+          await deleteDocument(docId);
+          break;
+      }
+      
+      // إخفاء القائمة بعد تنفيذ الإجراء
+      contextMenu.style.display = 'none';
+      
+    } catch (error) {
+      showToast('error', error.message || 'حدث خطأ أثناء تنفيذ الإجراء');
     }
   });
 
@@ -175,18 +212,35 @@ async function archiveDocument(docId) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
       },
       body: JSON.stringify({ id: docId })
     });
 
-    if (response.ok) {
-      showToast('success', 'تم أرشفة الكتاب بنجاح');
-      location.reload();
+    // التحقق من نوع المحتوى المستلم
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error('خطأ في الاستجابة من الخادم');
+    }
+
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      console.error('خطأ في تحليل البيانات:', e);
+      throw new Error('تنسيق البيانات المستلمة غير صحيح');
+    }
+    
+    if (response.ok && data.success) {
+      showToast('success', data.message || 'تم أرشفة الكتاب بنجاح');
+      setTimeout(() => location.reload(), 1000);
     } else {
-      throw new Error('فشل في أرشفة الكتاب');
+      throw new Error(data.message || 'فشل في أرشفة الكتاب');
     }
   } catch (error) {
-    showToast('error', error.message);
+    console.error('خطأ في الأرشفة:', error);
+    showToast('error', error.message || 'حدث خطأ أثناء الأرشفة');
   }
 }
 
@@ -219,7 +273,10 @@ async function showCommentDialog(docId) {
 // دالة إرسال التعليق
 async function submitComment(docId) {
   const commentText = document.getElementById('commentText').value;
-  if (!commentText.trim()) return;
+  if (!commentText.trim()) {
+    showToast('error', 'الرجاء إدخال نص التعليق');
+    return;
+  }
 
   try {
     const response = await fetch('add_comment.php', {
@@ -233,15 +290,18 @@ async function submitComment(docId) {
       })
     });
 
-    if (response.ok) {
-      showToast('success', 'تم إضافة التعليق بنجاح');
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      showToast('success', data.message || 'تم إضافة التعليق بنجاح');
       bootstrap.Modal.getInstance(document.querySelector('.modal')).hide();
-      location.reload();
+      setTimeout(() => location.reload(), 1000);
     } else {
-      throw new Error('فشل في إضافة التعليق');
+      throw new Error(data.message || 'فشل في إضافة التعليق');
     }
   } catch (error) {
-    showToast('error', error.message);
+    console.error('خطأ في إضافة التعليق:', error);
+    showToast('error', error.message || 'حدث خطأ أثناء إضافة التعليق');
   }
 }
 
@@ -297,43 +357,118 @@ async function showSendDialog(docId, type) {
 // دالة تحميل المستلمين
 async function loadReceivers(type) {
   try {
-    const response = await fetch('get_receivers.php?type=' + type);
-    const receivers = await response.json();
+    const response = await fetch('get_receivers.php?type=' + type, {
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('فشل في الاتصال بالخادم');
+    }
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.message || 'فشل في تحميل قائمة المستلمين');
+    }
+
+    const receivers = data.data;
     
     if (type === 'single') {
       const select = document.querySelector('select[name="receiver_id"]');
-      receivers.forEach(receiver => {
-        const option = document.createElement('option');
-        option.value = receiver.id;
-        option.textContent = receiver.name;
-        select.appendChild(option);
+      select.innerHTML = '<option value="">اختر الجهة</option>';
+      
+      receivers.forEach(group => {
+        if (group.items && group.items.length > 0) {
+          const optgroup = document.createElement('optgroup');
+          optgroup.label = group.group;
+          
+          group.items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.id;
+            option.textContent = item.name;
+            optgroup.appendChild(option);
+          });
+          
+          select.appendChild(optgroup);
+        }
       });
     } else {
       const container = document.getElementById('receiversList');
+      container.innerHTML = '';
+      
       receivers.forEach(group => {
-        container.innerHTML += `
-          <div class="receiver-group">
-            <h6>${group.name}</h6>
-            ${group.items.map(item => `
-              <div class="form-check">
-                <input class="form-check-input" type="checkbox" 
-                       name="receivers[]" value="${item.id}">
-                <label class="form-check-label">${item.name}</label>
-              </div>
-            `).join('')}
-          </div>
-        `;
+        if (group.items && group.items.length > 0) {
+          const groupDiv = document.createElement('div');
+          groupDiv.className = 'receiver-group mb-3';
+          
+          groupDiv.innerHTML = `
+            <h6 class="mb-2">${group.group}</h6>
+            <div class="row">
+              ${group.items.map(item => `
+                <div class="col-md-6 mb-2">
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" 
+                           name="receivers[]" value="${item.id}" id="receiver_${item.id}">
+                    <label class="form-check-label" for="receiver_${item.id}">
+                      ${item.name}
+                    </label>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          `;
+          
+          container.appendChild(groupDiv);
+        }
       });
+
+      // إضافة زر تحديد/إلغاء تحديد الكل
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'mb-3 text-end';
+      actionsDiv.innerHTML = `
+        <button type="button" class="btn btn-sm btn-outline-secondary me-2" onclick="toggleAllReceivers(true)">
+          تحديد الكل
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAllReceivers(false)">
+          إلغاء تحديد الكل
+        </button>
+      `;
+      container.insertBefore(actionsDiv, container.firstChild);
     }
   } catch (error) {
-    showToast('error', 'فشل في تحميل قائمة المستلمين');
+    console.error('خطأ في تحميل المستلمين:', error);
+    showToast('error', error.message);
   }
+}
+
+// دالة تحديد/إلغاء تحديد كل المستلمين
+function toggleAllReceivers(checked) {
+  const checkboxes = document.querySelectorAll('input[name="receivers[]"]');
+  checkboxes.forEach(checkbox => checkbox.checked = checked);
 }
 
 // دالة إرسال الكتاب
 async function submitSend(docId, type) {
   const form = document.getElementById('sendForm');
   const formData = new FormData(form);
+  
+  // التحقق من اختيار مستلم على الأقل
+  if (type === 'single' && !formData.get('receiver_id')) {
+    showToast('error', 'الرجاء اختيار جهة الإرسال');
+    return;
+  }
+  
+  if (type !== 'single') {
+    const selectedReceivers = formData.getAll('receivers[]');
+    if (!selectedReceivers.length) {
+      showToast('error', 'الرجاء اختيار جهة واحدة على الأقل');
+      return;
+    }
+  }
+
   formData.append('document_id', docId);
   formData.append('send_type', type);
 
@@ -343,15 +478,18 @@ async function submitSend(docId, type) {
       body: formData
     });
 
-    if (response.ok) {
-      showToast('success', 'تم إرسال الكتاب بنجاح');
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      showToast('success', data.message || 'تم إرسال الكتاب بنجاح');
       bootstrap.Modal.getInstance(document.querySelector('.modal')).hide();
-      location.reload();
+      setTimeout(() => location.reload(), 1000);
     } else {
-      throw new Error('فشل في إرسال الكتاب');
+      throw new Error(data.message || 'فشل في إرسال الكتاب');
     }
   } catch (error) {
-    showToast('error', error.message);
+    console.error('خطأ في إرسال الكتاب:', error);
+    showToast('error', error.message || 'حدث خطأ أثناء إرسال الكتاب');
   }
 }
 
@@ -366,30 +504,48 @@ async function deleteDocument(docId) {
       body: JSON.stringify({ id: docId })
     });
 
-    if (response.ok) {
-      showToast('success', 'تم حذف الكتاب بنجاح');
-      location.reload();
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      showToast('success', data.message || 'تم حذف الكتاب بنجاح');
+      setTimeout(() => location.reload(), 1000);
     } else {
-      throw new Error('فشل في حذف الكتاب');
+      throw new Error(data.message || 'فشل في حذف الكتاب');
     }
   } catch (error) {
-    showToast('error', error.message);
+    console.error('خطأ في حذف الكتاب:', error);
+    showToast('error', error.message || 'حدث خطأ أثناء حذف الكتاب');
   }
 }
 
-// دالة عرض الرسائل
+// تحسين دالة عرض الرسائل
 function showToast(type, message) {
+  // إزالة أي رسائل سابقة
+  const existingToasts = document.querySelectorAll('.toast');
+  existingToasts.forEach(toast => toast.remove());
+
   const toast = document.createElement('div');
   toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : 'danger'} border-0`;
   toast.setAttribute('role', 'alert');
+  toast.setAttribute('aria-live', 'assertive');
+  toast.setAttribute('aria-atomic', 'true');
+  
   toast.innerHTML = `
     <div class="d-flex">
-      <div class="toast-body">${message}</div>
+      <div class="toast-body">
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+        ${message}
+      </div>
       <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
     </div>
   `;
+  
   document.body.appendChild(toast);
-  const bsToast = new bootstrap.Toast(toast);
+  const bsToast = new bootstrap.Toast(toast, {
+    animation: true,
+    autohide: true,
+    delay: 3000
+  });
   bsToast.show();
 }
 

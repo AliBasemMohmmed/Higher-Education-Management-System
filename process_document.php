@@ -5,11 +5,21 @@ requireLogin();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // التحقق من وجود البيانات المطلوبة
-    $requiredFields = ['title', 'content'];
+    $requiredFields = ['document_id', 'title', 'content'];
     foreach ($requiredFields as $field) {
         if (!isset($_POST[$field]) || empty($_POST[$field])) {
-            die("الحقل $field مطلوب");
+            header("Location: create_document.php?error=missing_fields");
+            exit;
         }
+    }
+
+    // التحقق من تفرد معرف الكتاب
+    $documentId = $_POST['document_id'];
+    $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM documents WHERE document_id = ?");
+    $checkStmt->execute([$documentId]);
+    if ($checkStmt->fetchColumn() > 0) {
+        header("Location: create_document.php?error=duplicate_id");
+        exit;
     }
 
     // أخذ معلومات المرسل من الجلسة
@@ -31,7 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $filePath = $uploadDir . $fileName;
         
         if (!move_uploaded_file($_FILES['document_file']['tmp_name'], $filePath)) {
-            die('فشل في رفع الملف');
+            header("Location: create_document.php?error=file_upload");
+            exit;
         }
     }
     
@@ -42,15 +53,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // إدخال الكتاب كمسودة
         $stmt = $pdo->prepare("
             INSERT INTO documents (
-                title, content, sender_type, sender_id,
+                document_id, title, content, sender_type, sender_id,
                 file_path, status, created_at, created_by
             ) VALUES (
-                ?, ?, ?, ?, 
+                ?, ?, ?, ?, ?, 
                 ?, 'draft', NOW(), ?
             )
         ");
         
         $stmt->execute([
+            $documentId,
             $title,
             $content,
             $senderType,
@@ -59,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_id']
         ]);
 
-        $documentId = $pdo->lastInsertId();
+        $insertedId = $pdo->lastInsertId();
 
         // إضافة سجل في تاريخ الكتاب
         $historyStmt = $pdo->prepare("
@@ -67,12 +79,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 document_id, user_id, action, notes
             ) VALUES (?, ?, 'create', 'تم إنشاء الكتاب')
         ");
-        $historyStmt->execute([$documentId, $_SESSION['user_id']]);
+        $historyStmt->execute([$insertedId, $_SESSION['user_id']]);
 
         $pdo->commit();
         
-        // توجيه المستخدم إلى صفحة إرسال الكتاب
-        header("Location: send_document.php?id=" . $documentId);
+        // توجيه المستخدم إلى صفحة إرسال الكتاب مباشرة بدون إرجاع بيانات
+        header("Location: send_document.php?id=" . $insertedId);
         exit;
 
     } catch (Exception $e) {
@@ -80,7 +92,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($filePath && file_exists($filePath)) {
             unlink($filePath);
         }
-        die('حدث خطأ أثناء حفظ الكتاب: ' . $e->getMessage());
+        // تعديل رسالة الخطأ لتكون أكثر عمومية
+        header("Location: documents.php?error=1");
+        exit;
     }
 }
 

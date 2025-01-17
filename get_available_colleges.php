@@ -14,12 +14,17 @@ if (!isset($_GET['university_id'])) {
 $universityId = $_GET['university_id'];
 
 try {
-    // جلب كليات الجامعة المحددة
+    // جلب الكليات التي لم يتم تعيين وحدات لها من نفس الجامعة
     $stmt = $pdo->prepare("
-        SELECT id, name 
-        FROM colleges 
-        WHERE university_id = :university_id 
-        ORDER BY name
+        SELECT c.* 
+        FROM colleges c
+        WHERE c.university_id = :university_id
+        AND c.id NOT IN (
+            SELECT college_id 
+            FROM units 
+            WHERE college_id IS NOT NULL
+        )
+        ORDER BY c.name
     ");
     
     $stmt->execute(['university_id' => $universityId]);

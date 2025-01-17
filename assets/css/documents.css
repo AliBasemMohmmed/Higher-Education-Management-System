@@ -1,54 +1,71 @@
 .context-menu {
-  position: fixed;
-  display: none;
+  position: absolute;
   background: white;
   border: 1px solid #ddd;
   border-radius: 4px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  padding: 8px 0;
-  z-index: 9999;
-  min-width: 200px;
-  direction: rtl;
+  display: none;
+  z-index: 1000;
+  min-width: 180px;
+  padding: 5px 0;
 }
 
 .context-menu-item {
-  padding: 8px 16px;
+  padding: 8px 15px;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
   transition: background-color 0.2s;
-  color: #212529;
-  text-decoration: none;
-  white-space: nowrap;
 }
 
 .context-menu-item:hover {
   background-color: #f8f9fa;
 }
 
-.context-menu-item:active {
-  background-color: #e9ecef;
-}
-
-.context-menu-item i {
-  width: 20px;
-  text-align: center;
+.context-menu-item.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
   color: #6c757d;
 }
 
-.document-item.archived {
-  opacity: 0.7;
+.context-menu-item.disabled:hover {
+  background-color: transparent;
 }
 
-.modal-body {
-  max-height: 70vh;
-  overflow-y: auto;
+.context-menu-item i {
+  margin-left: 8px;
+  width: 16px;
+  text-align: center;
 }
 
-#receiversList {
-  max-height: 300px;
-  overflow-y: auto;
+.table tr.selected {
+  background-color: #f8f9fa;
+}
+
+.actions-cell {
+  cursor: pointer;
+}
+
+.actions-cell:hover {
+  background-color: #f8f9fa;
+}
+
+/* تحسينات للرسائل المنبثقة */
+.toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+}
+
+/* تحسينات للنوافذ المنبثقة */
+.modal-header {
+  border-bottom: 1px solid #dee2e6;
+}
+
+.modal-footer {
+  border-top: 1px solid #dee2e6;
 }
 
 .receiver-group {
@@ -57,98 +74,11 @@
 
 .receiver-group h6 {
   margin-bottom: 10px;
-  color: #666;
+  color: #495057;
 }
 
-.receiver-item {
+.form-check {
+  margin-right: 20px;
   margin-bottom: 5px;
-}
-
-.toast {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 1050;
-}
-
-.table tbody tr {
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.table tbody tr:hover {
-  background-color: #f8f9fa;
-}
-
-.table tbody tr:active {
-  transform: translateY(0);
-}
-
-.table tbody tr.selected {
-  background-color: #e3f2fd !important;
-}
-
-/* تحسين تأثير التحويم على عمود الإجراءات */
-.table tbody tr td:last-child {
-  position: relative;
-}
-
-.table tbody tr.selected td:last-child::after {
-  content: '';
-  position: absolute;
-  right: -5px;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-right: 5px solid #ddd;
-}
-
-/* تحسين مظهر خلية الإجراءات */
-.actions-cell {
-    position: relative;
-    min-width: 50px;
-    cursor: pointer;
-    text-align: center;
-}
-
-.actions-cell i {
-    color: #6c757d;
-    transition: color 0.2s;
-}
-
-.actions-cell:hover i {
-    color: #000;
-}
-
-/* تنسيق الصف المحدد */
-.table tbody tr.selected {
-    background-color: #e3f2fd !important;
-}
-/* تحسين تفاعلية الجدول */
-.table tbody tr {
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-.table tbody tr:hover {
-    background-color: #f8f9fa;
-}
-
-/* تنسيق أزرار الفلتر */
-.filter-buttons {
-    display: flex;
-    gap: 8px;
-}
-
-/* تنسيق رسائل النظام */
-.toast {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 1050;
-}
-
-.table tbody tr {
-    cursor: context-menu;
 }
 
