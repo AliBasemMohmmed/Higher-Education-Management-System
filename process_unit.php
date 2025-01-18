@@ -84,6 +84,7 @@ try {
                 description = ?, 
                 is_active = ?,
                 updated_by = ?,
+                user_id = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ");
@@ -95,6 +96,7 @@ try {
             $description,
             $isActive,
             $_SESSION['user_id'],
+            $_POST['user_id'],
             $id
         ]);
         $message = 'تم تحديث الوحدة بنجاح';
@@ -103,8 +105,8 @@ try {
         $stmt = $pdo->prepare("
             INSERT INTO units (
                 name, university_id, college_id, division_id, 
-                description, is_active, created_by, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                description, is_active, created_by, user_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ");
         $stmt->execute([
             $name,
@@ -113,7 +115,8 @@ try {
             $divisionId,
             $description,
             $isActive,
-            $_SESSION['user_id']
+            $_SESSION['user_id'],
+            $_POST['user_id']
         ]);
         $message = 'تمت إضافة الوحدة بنجاح';
     }
