@@ -5,24 +5,45 @@ requireLogin();
 
 header('Content-Type: application/json');
 
+$data = json_decode(file_get_contents('php://input'), true);
+$notification_id = $data['notification_id'] ?? null;
+
+if (!$notification_id) {
+    http_response_code(400);
+    echo json_encode([
+        'success' => false,
+        'message' => 'معرف الإشعار مطلوب'
+    ]);
+    exit;
+}
+
 try {
-    $data = json_decode(file_get_contents('php://input'), true);
-    $notificationId = $data['id'] ?? null;
-    
-    if (!$notificationId) {
-        throw new Exception('معرف الإشعار مطلوب');
-    }
-    
     $stmt = $pdo->prepare("
         UPDATE notifications 
         SET is_read = 1 
-        WHERE id = ? AND user_id = ?
+        WHERE id = ? AND receiver_id = ?
     ");
-    $success = $stmt->execute([$notificationId, $_SESSION['user_id']]);
     
-    echo json_encode(['success' => $success]);
-} catch (Exception $e) {
-    http_response_code(400);
-    echo json_encode(['error' => $e->getMessage()]);
+    $stmt->execute([$notification_id, $_SESSION['user_id']]);
+    
+    if ($stmt->rowCount() > 0) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'تم تحديد الإشعار كمقروء'
+        ]);
+    } else {
+        http_response_code(404);
+        echo json_encode([
+            'success' => false,
+            'message' => 'لم يتم العثور على الإشعار'
+        ]);
+    }
+} catch (PDOException $e) {
+    error_log("خطأ في تحديث الإشعار: " . $e->getMessage());
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'message' => 'حدث خطأ أثناء تحديث الإشعار'
+    ]);
 }
 ?> 

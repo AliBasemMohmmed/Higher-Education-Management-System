@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id'])) {
 // جلب عدد الإشعارات غير المقروءة
 $unreadNotifications = 0;
 try {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE receiver_id = ? AND is_read = 0");
     $stmt->execute([$_SESSION['user_id']]);
     $unreadNotifications = $stmt->fetchColumn();
 } catch (PDOException $e) {
@@ -36,14 +36,27 @@ try {
         .dropdown-item:hover { background-color: #f8f9fa; }
         .notification-badge {
             position: absolute;
-            top: 0;
-            right: 0;
+            top: -5px;
+            right: -5px;
             padding: 0.25rem 0.5rem;
             border-radius: 50%;
             background-color: #dc3545;
             color: white;
             font-size: 0.75rem;
+            min-width: 18px;
+            height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 2s infinite;
         }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
         /* تنسيقات إضافية للأزرار */
         .btn-outline-primary, .btn-outline-danger {
             transition: all 0.3s ease;
@@ -72,6 +85,153 @@ try {
             border-radius: 20px !important;
             padding: 8px 25px !important;
             font-weight: 500 !important;
+        }
+
+        /* تحسينات إضافية للقوائم المنسدلة */
+        .dropdown-menu {
+            margin-top: 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            border: none;
+            animation: fadeIn 0.2s ease-in;
+        }
+
+        /* تحسين مظهر الإشعارات */
+        .notification-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            padding: 0.25rem 0.5rem;
+            border-radius: 50%;
+            background-color: #dc3545;
+            color: white;
+            font-size: 0.75rem;
+            transform: translate(50%, -50%);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: translate(50%, -50%) scale(1); }
+            50% { transform: translate(50%, -50%) scale(1.2); }
+            100% { transform: translate(50%, -50%) scale(1); }
+        }
+
+        .notifications-dropdown {
+            width: 350px !important;
+            padding: 0;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .notifications-header {
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--primary-color), #00796b);
+            color: white;
+            border-radius: 5px 5px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .notifications-list {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+
+        .notification-item {
+            padding: 1rem;
+            border-bottom: 1px solid #eee;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: flex-start;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .notification-item:hover {
+            background-color: #f8f9fa;
+        }
+
+        .notification-item.unread {
+            background: linear-gradient(to right, #f0f7ff, white);
+            border-right: 4px solid var(--primary-color);
+        }
+
+        .notification-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-left: 1rem;
+            font-size: 1.2em;
+        }
+
+        .notification-content {
+            flex: 1;
+        }
+
+        .notification-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: #2c3e50;
+        }
+
+        .notification-message {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .notification-time {
+            font-size: 0.8em;
+            color: #999;
+        }
+
+        .view-all-link {
+            display: block;
+            padding: 1rem;
+            text-align: center;
+            background: #f8f9fa;
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+            border-radius: 0 0 5px 5px;
+            transition: all 0.3s ease;
+        }
+
+        .view-all-link:hover {
+            background: #e9ecef;
+            color: #00695c;
+        }
+
+        /* تحسين السكرولبار */
+        .notifications-dropdown::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .notifications-dropdown::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .notifications-dropdown::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .notifications-dropdown::-webkit-scrollbar-thumb:hover {
+            background: #666;
         }
     </style>
 </head>
@@ -174,17 +334,63 @@ try {
             <ul class="navbar-nav">
                 <!-- الإشعارات -->
                 <li class="nav-item dropdown">
-                    <a class="nav-link" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <a class="nav-link position-relative" href="#" id="notificationsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="fas fa-bell"></i>
-                        <span class="badge bg-danger notification-badge" style="display: none;"></span>
+                        <?php if ($unreadNotifications > 0): ?>
+                        <span class="notification-badge"><?php echo $unreadNotifications; ?></span>
+                        <?php endif; ?>
                     </a>
-                    <div class="dropdown-menu dropdown-menu-end notifications-dropdown" style="width: 300px; max-height: 400px; overflow-y: auto;">
-                        <h6 class="dropdown-header">الإشعارات</h6>
-                        <div class="notifications-list">
-
+                    <div class="dropdown-menu dropdown-menu-end notifications-dropdown">
+                        <div class="notifications-header">
+                            <h6 class="mb-0">الإشعارات</h6>
+                            <?php if ($unreadNotifications > 0): ?>
+                            <button class="btn btn-sm btn-light" onclick="markAllAsRead()">
+                                <i class="fas fa-check-double"></i>
+                                تحديد الكل كمقروء
+                            </button>
+                            <?php endif; ?>
                         </div>
-                        <div class="dropdown-divider"></div>
-                        <a class="dropdown-item text-center" href="notifications.php">عرض كل الإشعارات</a>
+                        <div class="notifications-list">
+                            <?php
+                            $stmt = $pdo->prepare("
+                                SELECT n.*, 
+                                       CASE 
+                                           WHEN n.is_read = 0 THEN 'unread'
+                                           ELSE ''
+                                       END as read_status
+                                FROM notifications n
+                                WHERE n.receiver_id = ? 
+                                ORDER BY n.created_at DESC 
+                                LIMIT 5
+                            ");
+                            $stmt->execute([$_SESSION['user_id']]);
+                            $headerNotifications = $stmt->fetchAll();
+
+                            if (empty($headerNotifications)): ?>
+                                <div class="text-center p-3">
+                                    <i class="fas fa-bell-slash text-muted"></i>
+                                    <p class="text-muted mb-0">لا توجد إشعارات جديدة</p>
+                                </div>
+                            <?php else:
+                                foreach ($headerNotifications as $notification): ?>
+                                <div class="notification-item <?php echo $notification['read_status']; ?>" 
+                                     onclick="markAsRead(<?php echo $notification['id']; ?>)">
+                                    <div class="notification-icon <?php echo htmlspecialchars($notification['type']); ?>">
+                                        <i class="<?php echo htmlspecialchars($notification['icon']); ?>"></i>
+                                    </div>
+                                    <div class="notification-content">
+                                        <div class="notification-title"><?php echo htmlspecialchars($notification['title']); ?></div>
+                                        <div class="notification-message"><?php echo htmlspecialchars($notification['message']); ?></div>
+                                        <div class="notification-time"><?php echo timeAgo($notification['created_at']); ?></div>
+                                    </div>
+                                </div>
+                            <?php endforeach;
+                            endif; ?>
+                        </div>
+                        <a href="notifications.php" class="view-all-link">
+                            عرض كل الإشعارات
+                            <i class="fas fa-arrow-left ms-1"></i>
+                        </a>
                     </div>
                 </li>
 
@@ -298,17 +504,81 @@ $(document).ready(function() {
         }
     });
 
-    // تحديث عدد الإشعارات كل دقيقة
+    // تحديث الإشعارات
     function updateNotifications() {
-        $.get('get_notifications_count.php', function(data) {
-            if (data.count > 0) {
-                $('.notification-badge').text(data.count).show();
+        $.get('get_notifications.php', function(data) {
+            // تحديث العداد
+            if (data.unreadCount > 0) {
+                let badge = $('.notification-badge');
+                if (badge.length === 0) {
+                    $('#notificationsDropdown').append(`<span class="notification-badge">${data.unreadCount}</span>`);
+                } else {
+                    badge.text(data.unreadCount);
+                }
             } else {
-                $('.notification-badge').hide();
+                $('.notification-badge').remove();
+            }
+
+            // تحديث قائمة الإشعارات
+            if (data.notifications && data.notifications.length > 0) {
+                let notificationsList = '';
+                data.notifications.forEach(function(notification) {
+                    notificationsList += `
+                        <div class="notification-item ${notification.is_read ? '' : 'unread'}" 
+                             onclick="markAsRead(${notification.id})">
+                            <div class="notification-icon ${notification.type}">
+                                <i class="${notification.icon}"></i>
+                            </div>
+                            <div class="notification-content">
+                                <div class="notification-title">${notification.title}</div>
+                                <div class="notification-message">${notification.message}</div>
+                                <div class="notification-time">${notification.timeAgo}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                $('.notifications-list').html(notificationsList);
+            } else {
+                $('.notifications-list').html(`
+                    <div class="text-center p-3">
+                        <i class="fas fa-bell-slash text-muted"></i>
+                        <p class="text-muted mb-0">لا توجد إشعارات جديدة</p>
+                    </div>
+                `);
             }
         });
     }
-    setInterval(updateNotifications, 60000); // تحديث كل دقيقة
+
+    // تحديث الإشعارات كل 30 ثانية
+    setInterval(updateNotifications, 30000);
+
+    // تحديث فوري عند فتح القائمة
+    $('#notificationsDropdown').on('show.bs.dropdown', function () {
+        updateNotifications();
+    });
+
+    // تحديد إشعار كمقروء
+    window.markAsRead = function(notificationId) {
+        $.post('mark_notification_read.php', { notification_id: notificationId }, function(data) {
+            if (data.success) {
+                updateNotifications();
+                // تحديث مظهر الإشعار مباشرة
+                $(`.notification-item[data-id="${notificationId}"]`).removeClass('unread');
+            }
+        });
+    };
+
+    // تحديد كل الإشعارات كمقروءة
+    window.markAllAsRead = function() {
+        $.post('mark_all_notifications_read.php', function(data) {
+            if (data.success) {
+                updateNotifications();
+                // تحديث مظهر جميع الإشعارات مباشرة
+                $('.notification-item').removeClass('unread');
+                $('.notification-badge').remove();
+            }
+        });
+    };
 });
 
 // تفعيل tooltips
