@@ -3,111 +3,197 @@ require_once 'functions.php';
 require_once 'auth.php';
 requireLogin();
 
-// التحقق من الصلاحيات
-if (!hasPermission('view_units')) {
-    die('غير مصرح لك بعرض الوحدات');
-}
+// تعريف متغيرات دور المستخدم ونوع الكيان
+$userRole = $_SESSION['user_role'] ?? 'user';
+$userEntityType = '';
 
-// التحقق من الانتماء الرئيسي للمستخدم
-$userRole = $_SESSION['user_role'];
-$userEntityType = $_SESSION['entity_type'] ?? null;
-$userDivisionId = null;
-
-if ($userEntityType === 'division') {
+// التحقق من نوع الكيان للمستخدم
+try {
     $stmt = $pdo->prepare("
-        SELECT ue.entity_id, ud.university_id
-        FROM user_entities ue 
-        INNER JOIN university_divisions ud ON ue.entity_id = ud.id
-        WHERE ue.user_id = ? 
-        AND ue.entity_type = 'division' 
-        AND ue.is_primary = 1
+        SELECT entity_type 
+        FROM user_entities 
+        WHERE user_id = ? 
+        AND is_primary = 1 
+        LIMIT 1
     ");
     $stmt->execute([$_SESSION['user_id']]);
-    $result = $stmt->fetch();
-    $userDivisionId = $result ? $result['entity_id'] : null;
-    $userUniversityId = $result ? $result['university_id'] : null;
+    $userEntityType = $stmt->fetchColumn() ?: '';
+} catch (PDOException $e) {
+    error_log("خطأ في جلب نوع الكيان للمستخدم: " . $e->getMessage());
 }
 
 include 'header.php';
 ?>
 
+<style>
+    /* تأثيرات حركية للعناصر */
+    .fade-in {
+        animation: fadeIn 0.5s ease-in;
+    }
+    
+    .slide-in {
+        animation: slideIn 0.5s ease-out;
+    }
+    
+    .bounce-in {
+        animation: bounceIn 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+    
+    .scale-in {
+        animation: scaleIn 0.5s ease-out;
+    }
+    
+    .card {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        animation: slideIn 0.5s ease-out;
+    }
+    
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+    }
+    
+    .btn {
+        transition: all 0.3s ease;
+    }
+    
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .table tbody tr {
+        transition: all 0.3s ease;
+        animation: fadeIn 0.5s ease-in;
+        animation-fill-mode: both;
+    }
+    
+    .table tbody tr:hover {
+        transform: scale(1.01);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        z-index: 1;
+        position: relative;
+        background-color: rgba(0,123,255,0.05);
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideIn {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    
+    @keyframes bounceIn {
+        0% { transform: scale(0.3); opacity: 0; }
+        50% { transform: scale(1.05); }
+        70% { transform: scale(0.9); }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    
+    @keyframes scaleIn {
+        from { transform: scale(0.9); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
+    /* تأثيرات إضافية للعناصر */
+    .form-control, .form-select {
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus, .form-select:focus {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,123,255,0.1);
+    }
+
+    .alert {
+        animation: slideIn 0.5s ease-out;
+    }
+
+    .modal.fade .modal-dialog {
+        transition: transform 0.3s ease-out;
+        transform: scale(0.9);
+    }
+
+    .modal.show .modal-dialog {
+        transform: scale(1);
+    }
+
+    /* أنماط إضافية لمربع البحث */
+    .search-box {
+        position: relative;
+    }
+
+    .search-box input {
+        padding-right: 30px;
+        border-radius: 20px;
+        border: 1px solid #ddd;
+        transition: all 0.3s ease;
+    }
+
+    .search-box input:focus {
+        box-shadow: 0 0 10px rgba(0,123,255,0.2);
+        border-color: #80bdff;
+        width: 300px;
+    }
+
+    /* تحسين مظهر الجدول */
+    .table {
+        margin-bottom: 0;
+    }
+
+    .table th {
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .table td {
+        vertical-align: middle;
+    }
+
+    /* تأثير حركي للبحث */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
 <div class="container mt-4">
-    <h2>إدارة الوحدات</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="bounce-in">إدارة الوحدات</h2>
+        <?php if ($userRole === 'admin' || ($userEntityType === 'division' && hasPermission('add_unit'))): ?>
+        <button type="button" class="btn btn-primary rounded-pill" onclick="showAddUnitModal()">
+            <i class="fas fa-plus-circle me-2"></i>إضافة وحدة جديدة
+        </button>
+        <?php endif; ?>
+    </div>
 
     <?php if (isset($_SESSION['success'])): ?>
-        <div class="alert alert-success">
+        <div class="alert alert-success slide-in">
             <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
         </div>
     <?php endif; ?>
 
     <?php if (isset($_SESSION['error'])): ?>
-        <div class="alert alert-danger">
+        <div class="alert alert-danger slide-in">
             <?php echo $_SESSION['error']; unset($_SESSION['error']); ?>
         </div>
     <?php endif; ?>
-    
-    <?php if ($userRole === 'admin' || ($userEntityType === 'division' && hasPermission('add_unit'))): ?>
-    <div class="card mb-4">
-        <div class="card-header">
-            إضافة وحدة جديدة
-        </div>
-        <div class="card-body">
-            <form id="addUnitForm" method="POST" action="process_unit.php" class="needs-validation" novalidate>
-                <input type="hidden" name="action" value="add">
-                <div class="mb-3">
-                    <label class="form-label">اسم الوحدة</label>
-                    <input type="text" name="name" class="form-control" required>
-                    <div class="invalid-feedback">يرجى إدخال اسم الوحدة</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">الجامعة</label>
-                    <select name="university_id" id="university_select" class="form-control" required>
-                        <option value="">اختر الجامعة</option>
-                        <?php
-                        $universities = $pdo->query("SELECT * FROM universities ORDER BY name")->fetchAll();
-                        foreach ($universities as $univ) {
-                            echo "<option value='{$univ['id']}'>{$univ['name']}</option>";
-                        }
-                        ?>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">الكلية</label>
-                    <select name="college_id" id="college_select" class="form-control" required>
-                        <option value="">اختر الكلية</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">الشعبة</label>
-                    <select name="division_id" id="division_select" class="form-control" required>
-                        <option value="">اختر الشعبة</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">مدير الوحدة</label>
-                    <select name="unit_manager_id" id="unit_manager_select" class="form-control" required>
-                        <option value="">اختر مدير الوحدة</option>
-                    </select>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">الوصف</label>
-                    <textarea name="description" class="form-control" rows="3"></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-plus-circle me-2"></i>إضافة الوحدة
-                </button>
-            </form>
-        </div>
-    </div>
-    <?php endif; ?>
 
-    <div class="card">
+    <div class="card scale-in">
         <div class="card-header">
-            الوحدات الحالية
+            <div class="d-flex justify-content-between align-items-center">
+                <span>الوحدات الحالية</span>
+                <div class="search-box">
+                    <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="بحث..." style="width: 250px;">
+                </div>
+            </div>
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-striped">
+                <table class="table table-striped" id="unitsTable">
                     <thead>
                         <tr>
                             <th>#</th>
@@ -121,7 +207,6 @@ include 'header.php';
                     <tbody>
                         <?php
                         try {
-                            // إذا كان المستخدم أدمن، اعرض كل الوحدات
                             if ($userRole === 'admin') {
                                 $stmt = $pdo->query("
                                     SELECT u.*, un.name as university_name,
@@ -133,9 +218,7 @@ include 'header.php';
                                     LEFT JOIN users updater ON u.updated_by = updater.id
                                     ORDER BY u.id DESC
                                 ");
-                            } 
-                            // إذا كان مدير شعبة، اعرض فقط الوحدات التابعة لجامعته
-                            else {
+                            } else {
                                 $stmt = $pdo->prepare("
                                     SELECT u.*, un.name as university_name,
                                            COALESCE(creator.full_name, 'غير معروف') as created_by_name,
@@ -197,7 +280,7 @@ include 'header.php';
     </div>
 </div>
 
-<!-- إضافة مودال التعديل -->
+<!-- مودال التعديل -->
 <div class="modal fade" id="editUnitModal" tabindex="-1" aria-labelledby="editUnitModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -212,52 +295,110 @@ include 'header.php';
     </div>
 </div>
 
+<!-- مودال إضافة وحدة جديدة -->
+<div class="modal fade" id="addUnitModal" tabindex="-1" aria-labelledby="addUnitModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addUnitModalLabel">إضافة وحدة جديدة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUnitForm" method="POST" action="process_unit.php" class="needs-validation" novalidate>
+                    <input type="hidden" name="action" value="add">
+                    <div class="mb-3">
+                        <label class="form-label">اسم الوحدة</label>
+                        <input type="text" name="name" class="form-control" required>
+                        <div class="invalid-feedback">يرجى إدخال اسم الوحدة</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الجامعة</label>
+                        <select name="university_id" id="university_select" class="form-select" required>
+                            <option value="">اختر الجامعة</option>
+                            <?php
+                            $universities = $pdo->query("SELECT * FROM universities ORDER BY name")->fetchAll();
+                            foreach ($universities as $univ) {
+                                echo "<option value='{$univ['id']}'>{$univ['name']}</option>";
+                            }
+                            ?>
+                        </select>
+                        <div class="invalid-feedback">يرجى اختيار الجامعة</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الكلية</label>
+                        <select name="college_id" id="college_select" class="form-select" required>
+                            <option value="">اختر الكلية</option>
+                        </select>
+                        <div class="invalid-feedback">يرجى اختيار الكلية</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الشعبة</label>
+                        <select name="division_id" id="division_select" class="form-select" required>
+                            <option value="">اختر الشعبة</option>
+                        </select>
+                        <div class="invalid-feedback">يرجى اختيار الشعبة</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">مدير الوحدة</label>
+                        <select name="unit_manager_id" id="unit_manager_select" class="form-select" required>
+                            <option value="">اختر مدير الوحدة</option>
+                        </select>
+                        <div class="invalid-feedback">يرجى اختيار مدير الوحدة</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">الوصف</label>
+                        <textarea name="description" class="form-control" rows="3"></textarea>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-2"></i>حفظ
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-2"></i>إلغاء
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
+// تفعيل التأثيرات الحركية للعناصر
+document.addEventListener('DOMContentLoaded', function() {
+    // تأثيرات الصفوف
+    const rows = document.querySelectorAll('tbody tr');
+    rows.forEach((row, index) => {
+        row.style.opacity = '0';
+        setTimeout(() => {
+            row.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            row.style.opacity = '1';
+            row.style.transform = 'translateY(0)';
+        }, index * 100);
+    });
+
+    // تأثيرات البطاقات
+    const cards = document.querySelectorAll('.card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 200);
+    });
+});
+
 // دالة التعديل
 async function editUnit(unitId) {
     try {
-        // عرض مؤشر التحميل مع تأثيرات حركية
-        Swal.fire({
-            title: 'جاري تحميل البيانات',
-            html: `
-                <div class="text-center">
-                    <i class="fas fa-spinner fa-spin fa-3x mb-3 text-primary"></i>
-                    <div class="progress mt-3" style="height: 10px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
-                    </div>
-                    <p class="mt-2 text-muted">يرجى الانتظار قليلاً...</p>
-                </div>
-            `,
-            allowOutsideClick: false,
-            allowEscapeKey: false,
-            showConfirmButton: false,
-            showClass: {
-                popup: 'animate__animated animate__fadeIn'
-            },
-            hideClass: {
-                popup: 'animate__animated animate__fadeOut'
-            }
-        });
-
-        // تأخير مصطنع لإظهار التحميل بشكل أوضح
-        await new Promise(resolve => setTimeout(resolve, 800));
-
-        // جلب بيانات الوحدة
         const response = await fetch(`get_unit_details.php?id=${unitId}`);
         const data = await response.json();
 
         if (!response.ok) {
             throw new Error(data.message || 'حدث خطأ أثناء جلب البيانات');
         }
-
-        // تأخير إضافي قبل إغلاق نافذة التحميل
-        await new Promise(resolve => setTimeout(resolve, 400));
-
-        // إغلاق مؤشر التحميل بتأثير حركي
-        await Swal.close();
-
-        // تأخير قصير قبل فتح المودال
-        await new Promise(resolve => setTimeout(resolve, 200));
 
         // تحضير نموذج التعديل
         const modalContent = `
@@ -377,32 +518,13 @@ async function editUnit(unitId) {
                         }, 1000);
                     }
 
-                    // عرض رسالة النجاح مع تأثيرات حركية
-                    Swal.fire({
-                        title: 'تم التعديل!',
-                        text: 'تم تعديل الوحدة بنجاح',
-                        icon: 'success',
-                        showConfirmButton: false,
-                        timer: 1500,
-                        timerProgressBar: true,
-                        showClass: {
-                            popup: 'animate__animated animate__fadeInDown'
-                        },
-                        hideClass: {
-                            popup: 'animate__animated animate__fadeOutUp'
-                        },
-                        didOpen: (toast) => {
-                            toast.addEventListener('mouseenter', Swal.stopTimer);
-                            toast.addEventListener('mouseleave', Swal.resumeTimer);
-                        }
-                    }).then(() => {
-                        // تحديث الصفحة بتأثير حركي
-                        document.body.style.opacity = '0';
-                        document.body.style.transition = 'opacity 0.5s';
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 500);
-                    });
+                    // عرض رسالة النجاح
+                    await showSuccessAnimation();
+                    
+                    // تحديث الصفحة
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
                 } else {
                     throw new Error(result.message || 'حدث خطأ أثناء التعديل');
                 }
@@ -410,7 +532,10 @@ async function editUnit(unitId) {
                 Swal.fire({
                     title: 'خطأ!',
                     text: error.message,
-                    icon: 'error'
+                    icon: 'error',
+                    showClass: {
+                        popup: 'animate__animated animate__shakeX'
+                    }
                 });
             }
         });
@@ -456,7 +581,10 @@ async function editUnit(unitId) {
         Swal.fire({
             title: 'خطأ!',
             text: error.message,
-            icon: 'error'
+            icon: 'error',
+            showClass: {
+                popup: 'animate__animated animate__shakeX'
+            }
         });
     }
 }
@@ -488,178 +616,122 @@ async function deleteUnit(unitId, unitName) {
         },
         hideClass: {
             popup: 'animate__animated animate__fadeOut'
-        },
-        showLoaderOnConfirm: true,
-        preConfirm: async () => {
-            try {
-                const response = await fetch(`delete_unit.php?id=${unitId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (!response.ok) {
-                    throw new Error('فشل في الاتصال بالخادم');
-                }
-
-                const data = await response.json();
-                if (!data.success) {
-                    throw new Error(data.message || 'حدث خطأ أثناء الحذف');
-                }
-
-                return data;
-            } catch (error) {
-                Swal.showValidationMessage(`
-                    <i class="fas fa-times-circle text-danger"></i>
-                    فشل في الحذف: ${error.message}
-                `);
-            }
-        },
-        allowOutsideClick: () => !Swal.isLoading()
+        }
     });
 
     if (result.isConfirmed) {
-        await Swal.fire({
-            title: '<i class="fas fa-check-circle text-success"></i>',
-            html: '<strong>تم الحذف بنجاح!</strong>',
-            icon: 'success',
-            timer: 1500,
-            showConfirmButton: false,
-            customClass: {
-                popup: 'animate__animated animate__fadeInUp'
-            }
-        });
+        try {
+            const response = await fetch(`delete_unit.php?id=${unitId}`);
+            const data = await response.json();
 
-        // تحديث الصفحة
-        window.location.reload();
+            if (data.success) {
+                // حذف الصف مع تأثير حركي
+                const row = document.querySelector(`tr[data-unit-id="${unitId}"]`);
+                if (row) {
+                    row.style.transition = 'all 0.5s ease';
+                    row.style.transform = 'translateX(100%)';
+                    row.style.opacity = '0';
+                    setTimeout(() => {
+                        row.remove();
+                    }, 500);
+                }
+
+                await Swal.fire({
+                    title: 'تم الحذف!',
+                    text: 'تم حذف الوحدة بنجاح',
+                    icon: 'success',
+                    timer: 1500,
+                    showConfirmButton: false,
+                    timerProgressBar: true,
+                    showClass: {
+                        popup: 'animate__animated animate__fadeInDown'
+                    },
+                    hideClass: {
+                        popup: 'animate__animated animate__fadeOutUp'
+                    }
+                });
+
+                // تحديث الصفحة
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                throw new Error(data.message || 'حدث خطأ أثناء الحذف');
+            }
+        } catch (error) {
+            Swal.fire({
+                title: 'خطأ!',
+                text: error.message,
+                icon: 'error',
+                showClass: {
+                    popup: 'animate__animated animate__shakeX'
+                }
+            });
+        }
     }
 }
 
-document.getElementById('university_select').addEventListener('change', function() {
+// تحسين دالة عرض النجاح
+function showSuccessAnimation() {
+    return Swal.fire({
+        icon: 'success',
+        title: 'تمت العملية بنجاح!',
+        showConfirmButton: false,
+        timer: 1500,
+        timerProgressBar: true,
+        showClass: {
+            popup: 'animate__animated animate__fadeInDown'
+        },
+        hideClass: {
+            popup: 'animate__animated animate__fadeOutUp'
+        }
+    });
+}
+
+// تفعيل التحديث التلقائي للقوائم المنسدلة في نموذج الإضافة
+document.getElementById('university_select').addEventListener('change', async function() {
     const universityId = this.value;
     const collegeSelect = document.getElementById('college_select');
     const divisionSelect = document.getElementById('division_select');
-    const managerSelect = document.getElementById('unit_manager_select');
     
     // تفريغ القوائم
     collegeSelect.innerHTML = '<option value="">اختر الكلية</option>';
     divisionSelect.innerHTML = '<option value="">اختر الشعبة</option>';
-    managerSelect.innerHTML = '<option value="">اختر مدير الوحدة</option>';
     
     if (universityId) {
-        // إظهار رسالة تحميل للكليات
-        collegeSelect.disabled = true;
-        collegeSelect.innerHTML = '<option value="">جاري التحميل...</option>';
-        
-        // جلب الكليات المتاحة
-        fetch(`get_available_colleges.php?university_id=${universityId}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('حدث خطأ في جلب البيانات');
-                }
-                return response.json();
-            })
-            .then(colleges => {
-                collegeSelect.innerHTML = '<option value="">اختر الكلية</option>';
-                if (colleges.length === 0) {
-                    collegeSelect.innerHTML += '<option value="" disabled>لا توجد كليات متاحة</option>';
-                } else {
-                    colleges.forEach(college => {
-                        const option = document.createElement('option');
-                        option.value = college.id;
-                        option.textContent = college.name;
-                        collegeSelect.appendChild(option);
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                collegeSelect.innerHTML = '<option value="">حدث خطأ في جلب البيانات</option>';
-            })
-            .finally(() => {
-                collegeSelect.disabled = false;
+        try {
+            // جلب الكليات
+            const collegesResponse = await fetch(`get_available_colleges.php?university_id=${universityId}`);
+            const colleges = await collegesResponse.json();
+            colleges.forEach(college => {
+                const option = document.createElement('option');
+                option.value = college.id;
+                option.textContent = college.name;
+                collegeSelect.appendChild(option);
             });
 
-        // جلب الشعب المتاحة
-        divisionSelect.disabled = true;
-        divisionSelect.innerHTML = '<option value="">جاري التحميل...</option>';
-        
-        fetch(`get_divisions.php?university_id=${universityId}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('حدث خطأ في جلب البيانات');
-                }
-                return response.json();
-            })
-            .then(divisions => {
-                divisionSelect.innerHTML = '<option value="">اختر الشعبة</option>';
-                if (divisions.length === 0) {
-                    divisionSelect.innerHTML += '<option value="" disabled>لا توجد شعب متاحة</option>';
-                } else {
-                    divisions.forEach(division => {
-                        const option = document.createElement('option');
-                        option.value = division.id;
-                        option.textContent = division.name;
-                        divisionSelect.appendChild(option);
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                divisionSelect.innerHTML = '<option value="">حدث خطأ في جلب البيانات</option>';
-            })
-            .finally(() => {
-                divisionSelect.disabled = false;
+            // جلب الشعب
+            const divisionsResponse = await fetch(`get_divisions.php?university_id=${universityId}`);
+            const divisions = await divisionsResponse.json();
+            divisions.forEach(division => {
+                const option = document.createElement('option');
+                option.value = division.id;
+                option.textContent = division.name;
+                divisionSelect.appendChild(option);
             });
+        } catch (error) {
+            console.error('Error:', error);
+        }
     }
 });
 
-document.getElementById('college_select').addEventListener('change', function() {
-    const universityId = document.getElementById('university_select').value;
-    const collegeId = this.value;
-    const managerSelect = document.getElementById('unit_manager_select');
-    
-    // تفريغ القائمة
-    managerSelect.innerHTML = '<option value="">اختر مدير الوحدة</option>';
-    
-    if (collegeId) {
-        // إظهار رسالة تحميل
-        managerSelect.disabled = true;
-        managerSelect.innerHTML = '<option value="">جاري التحميل...</option>';
-        
-        // جلب المستخدمين حسب الجامعة والكلية
-        fetch(`get_unit_users.php?university_id=${universityId}&college_id=${collegeId}`)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('حدث خطأ في جلب البيانات');
-                }
-                return response.json();
-            })
-            .then(users => {
-                managerSelect.innerHTML = '<option value="">اختر مدير الوحدة</option>';
-                if (users.length === 0) {
-                    managerSelect.innerHTML += '<option value="" disabled>لا يوجد مستخدمين متاحين</option>';
-                } else {
-                    users.forEach(user => {
-                        const option = document.createElement('option');
-                        option.value = user.id;
-                        option.textContent = user.full_name;
-                        managerSelect.appendChild(option);
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                managerSelect.innerHTML = '<option value="">حدث خطأ في جلب البيانات</option>';
-            })
-            .finally(() => {
-                managerSelect.disabled = false;
-            });
-    }
-});
+// دالة إظهار مودال إضافة وحدة جديدة
+function showAddUnitModal() {
+    const modal = new bootstrap.Modal(document.getElementById('addUnitModal'));
+    modal.show();
+}
 
-// إضافة معالج النموذج
+// تعديل معالج نموذج الإضافة
 document.getElementById('addUnitForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
@@ -670,24 +742,6 @@ document.getElementById('addUnitForm').addEventListener('submit', async function
     }
 
     try {
-        // عرض مؤشر التحميل
-        Swal.fire({
-            title: 'جاري إضافة الوحدة',
-            html: `
-                <div class="text-center">
-                    <i class="fas fa-spinner fa-spin fa-3x mb-3 text-primary"></i>
-                    <div class="progress mt-3" style="height: 10px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
-                    </div>
-                </div>
-            `,
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            showClass: {
-                popup: 'animate__animated animate__fadeIn'
-            }
-        });
-
         const formData = new FormData(this);
         const response = await fetch('process_unit.php', {
             method: 'POST',
@@ -697,35 +751,17 @@ document.getElementById('addUnitForm').addEventListener('submit', async function
         const result = await response.json();
 
         if (result.success) {
-            // إغلاق مؤشر التحميل
-            Swal.close();
-
-            // عرض رسالة النجاح مع تأثيرات حركية
-            await Swal.fire({
-                title: '<i class="fas fa-check-circle text-success fa-lg"></i>',
-                html: `
-                    <div class="animate__animated animate__fadeInUp">
-                        <h4 class="text-success mb-3">تمت الإضافة بنجاح!</h4>
-                        <p class="mb-0">تم إضافة الوحدة الجديدة بنجاح</p>
-                    </div>
-                `,
-                showConfirmButton: false,
-                timer: 2000,
-                timerProgressBar: true,
-                showClass: {
-                    popup: 'animate__animated animate__fadeInDown'
-                },
-                hideClass: {
-                    popup: 'animate__animated animate__fadeOutUp'
-                }
-            });
-
-            // تحديث الصفحة بتأثير حركي
-            document.body.style.opacity = '0';
-            document.body.style.transition = 'opacity 0.5s';
+            // إغلاق المودال
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addUnitModal'));
+            modal.hide();
+            
+            // عرض رسالة النجاح
+            await showSuccessAnimation();
+            
+            // تحديث الصفحة
             setTimeout(() => {
                 window.location.reload();
-            }, 500);
+            }, 1500);
         } else {
             throw new Error(result.message || 'حدث خطأ أثناء إضافة الوحدة');
         }
@@ -738,6 +774,67 @@ document.getElementById('addUnitForm').addEventListener('submit', async function
                 popup: 'animate__animated animate__shakeX'
             }
         });
+    }
+});
+
+// دالة البحث في الجدول
+document.getElementById('searchInput').addEventListener('keyup', function() {
+    const searchText = this.value.toLowerCase();
+    const table = document.getElementById('unitsTable');
+    const rows = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const cells = row.getElementsByTagName('td');
+        let found = false;
+
+        for (let j = 0; j < cells.length - 1; j++) { // نستثني عمود الإجراءات
+            const cellText = cells[j].textContent.toLowerCase();
+            if (cellText.includes(searchText)) {
+                found = true;
+                break;
+            }
+        }
+
+        // تطبيق تأثير حركي عند إظهار/إخفاء الصفوف
+        if (found) {
+            row.style.display = '';
+            row.style.animation = 'fadeIn 0.5s';
+        } else {
+            row.style.display = 'none';
+        }
+    }
+});
+
+// تحديث معالج تغيير الكلية لجلب مديري الوحدات
+document.getElementById('college_select').addEventListener('change', async function() {
+    const universityId = document.getElementById('university_select').value;
+    const collegeId = this.value;
+    const managerSelect = document.getElementById('unit_manager_select');
+    
+    // تفريغ القائمة
+    managerSelect.innerHTML = '<option value="">اختر مدير الوحدة</option>';
+    
+    if (collegeId) {
+        try {
+            // جلب المستخدمين حسب الجامعة والكلية
+            const response = await fetch(`get_unit_users.php?university_id=${universityId}&college_id=${collegeId}`);
+            const users = await response.json();
+            
+            if (users.length === 0) {
+                managerSelect.innerHTML += '<option value="" disabled>لا يوجد مستخدمين متاحين</option>';
+            } else {
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = user.full_name;
+                    managerSelect.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            managerSelect.innerHTML = '<option value="">حدث خطأ في جلب البيانات</option>';
+        }
     }
 });
 </script>
