@@ -9,15 +9,16 @@ include 'header.php';
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $perPage = 20;
 $offset = ($page - 1) * $perPage;
+$total = 0;
 
 try {
-    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ?");
+    $countStmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE receiver_id = ?");
     $countStmt->execute([$_SESSION['user_id']]);
     $total = $countStmt->fetchColumn();
     
     $stmt = $pdo->prepare("
         SELECT * FROM notifications 
-        WHERE user_id = ? 
+        WHERE receiver_id = ? 
         ORDER BY created_at DESC 
         LIMIT ?, ?
     ");
@@ -33,6 +34,7 @@ try {
     $_SESSION['error'] = 'حدث خطأ في جلب الإشعارات';
     $notifications = [];
     $totalPages = 0;
+    $total = 0;
 }
 ?>
 

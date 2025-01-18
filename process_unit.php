@@ -84,11 +84,11 @@ try {
                 description = ?, 
                 is_active = ?,
                 updated_by = ?,
-                user_id = ?,
-                updated_at = CURRENT_TIMESTAMP
+                user_id = ?
             WHERE id = ?
         ");
-        $stmt->execute([
+        
+        if (!$stmt->execute([
             $name,
             $universityId,
             $collegeId,
@@ -98,20 +98,22 @@ try {
             $_SESSION['user_id'],
             $_POST['user_id'],
             $id
-        ]);
+        ])) {
+            throw new PDOException("فشل في تحديث الوحدة");
+        }
 
         // إرسال إشعار للمدير الجديد
         $stmt = $pdo->prepare("
             INSERT INTO notifications (
-                user_id, 
-                title, 
-                message, 
+                sender_id,
+                receiver_id,
+                title,
+                message,
                 type,
                 icon,
                 color,
-                is_read,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                is_read
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // جلب معلومات الجامعة والكلية
@@ -125,6 +127,10 @@ try {
         ");
         $infoStmt->execute([$universityId, $collegeId]);
         $info = $infoStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$info) {
+            throw new PDOException("لم يتم العثور على معلومات الجامعة والكلية");
+        }
 
         $title = "تم تعيينك رئيساً للوحدة";
         $message = sprintf(
@@ -135,25 +141,36 @@ try {
             date('Y-m-d H:i:s')
         );
 
-        $stmt->execute([
+        if (!$stmt->execute([
+            $_SESSION['user_id'],
             $_POST['user_id'],
             $title,
             $message,
             'unit_assignment',
-            'fas fa-user-tie',
-            'primary'
-        ]);
+            'fas fa-crown',
+            '#198754',
+            0
+        ])) {
+            throw new PDOException("فشل في إرسال الإشعار");
+        }
 
         $message = 'تم تحديث الوحدة بنجاح';
     } else {
         // إضافة وحدة جديدة
         $stmt = $pdo->prepare("
             INSERT INTO units (
-                name, university_id, college_id, division_id, 
-                description, is_active, created_by, user_id, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                name, 
+                university_id, 
+                college_id, 
+                division_id, 
+                description, 
+                is_active, 
+                created_by, 
+                user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $stmt->execute([
+        
+        if (!$stmt->execute([
             $name,
             $universityId,
             $collegeId,
@@ -162,20 +179,22 @@ try {
             $isActive,
             $_SESSION['user_id'],
             $_POST['user_id']
-        ]);
+        ])) {
+            throw new PDOException("فشل في إضافة الوحدة");
+        }
 
         // إرسال إشعار للمدير الجديد
         $stmt = $pdo->prepare("
             INSERT INTO notifications (
-                user_id, 
-                title, 
-                message, 
+                sender_id,
+                receiver_id,
+                title,
+                message,
                 type,
                 icon,
                 color,
-                is_read,
-                created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+                is_read
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
 
         // جلب معلومات الجامعة والكلية
@@ -190,6 +209,10 @@ try {
         $infoStmt->execute([$universityId, $collegeId]);
         $info = $infoStmt->fetch(PDO::FETCH_ASSOC);
 
+        if (!$info) {
+            throw new PDOException("لم يتم العثور على معلومات الجامعة والكلية");
+        }
+
         $title = "تهانينا! تم تعيينك رئيساً للوحدة";
         $message = sprintf(
             "تم تعيينك رئيساً لوحدة %s في كلية %s بجامعة %s بتاريخ %s. نتمنى لك التوفيق في مهامك الجديدة! 🎉",
@@ -199,14 +222,18 @@ try {
             date('Y-m-d H:i:s')
         );
 
-        $stmt->execute([
+        if (!$stmt->execute([
+            $_SESSION['user_id'],
             $_POST['user_id'],
             $title,
             $message,
             'unit_assignment',
             'fas fa-crown',
-            'success'
-        ]);
+            '#198754',
+            0
+        ])) {
+            throw new PDOException("فشل في إرسال الإشعار");
+        }
 
         $message = 'تمت إضافة الوحدة بنجاح';
     }
@@ -221,6 +248,6 @@ try {
     $pdo->rollBack();
     error_log("خطأ في معالجة الوحدة: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['success' => false, 'message' => 'حدث خطأ أثناء معالجة البيانات']);
+    echo json_encode(['success' => false, 'message' => 'حدث خطأ أثناء معالجة البيانات: ' . $e->getMessage()]);
 }
 ?>
