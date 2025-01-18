@@ -99,6 +99,51 @@ try {
             $_POST['user_id'],
             $id
         ]);
+
+        // إرسال إشعار للمدير الجديد
+        $stmt = $pdo->prepare("
+            INSERT INTO notifications (
+                user_id, 
+                title, 
+                message, 
+                type,
+                icon,
+                color,
+                is_read,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+        ");
+
+        // جلب معلومات الجامعة والكلية
+        $infoStmt = $pdo->prepare("
+            SELECT 
+                u.name as university_name,
+                c.name as college_name
+            FROM universities u
+            JOIN colleges c ON c.university_id = u.id
+            WHERE u.id = ? AND c.id = ?
+        ");
+        $infoStmt->execute([$universityId, $collegeId]);
+        $info = $infoStmt->fetch(PDO::FETCH_ASSOC);
+
+        $title = "تم تعيينك رئيساً للوحدة";
+        $message = sprintf(
+            "تم تعيينك رئيساً لوحدة %s في كلية %s بجامعة %s بتاريخ %s",
+            $name,
+            $info['college_name'],
+            $info['university_name'],
+            date('Y-m-d H:i:s')
+        );
+
+        $stmt->execute([
+            $_POST['user_id'],
+            $title,
+            $message,
+            'unit_assignment',
+            'fas fa-user-tie',
+            'primary'
+        ]);
+
         $message = 'تم تحديث الوحدة بنجاح';
     } else {
         // إضافة وحدة جديدة
@@ -118,6 +163,51 @@ try {
             $_SESSION['user_id'],
             $_POST['user_id']
         ]);
+
+        // إرسال إشعار للمدير الجديد
+        $stmt = $pdo->prepare("
+            INSERT INTO notifications (
+                user_id, 
+                title, 
+                message, 
+                type,
+                icon,
+                color,
+                is_read,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+        ");
+
+        // جلب معلومات الجامعة والكلية
+        $infoStmt = $pdo->prepare("
+            SELECT 
+                u.name as university_name,
+                c.name as college_name
+            FROM universities u
+            JOIN colleges c ON c.university_id = u.id
+            WHERE u.id = ? AND c.id = ?
+        ");
+        $infoStmt->execute([$universityId, $collegeId]);
+        $info = $infoStmt->fetch(PDO::FETCH_ASSOC);
+
+        $title = "تهانينا! تم تعيينك رئيساً للوحدة";
+        $message = sprintf(
+            "تم تعيينك رئيساً لوحدة %s في كلية %s بجامعة %s بتاريخ %s. نتمنى لك التوفيق في مهامك الجديدة! 🎉",
+            $name,
+            $info['college_name'],
+            $info['university_name'],
+            date('Y-m-d H:i:s')
+        );
+
+        $stmt->execute([
+            $_POST['user_id'],
+            $title,
+            $message,
+            'unit_assignment',
+            'fas fa-crown',
+            'success'
+        ]);
+
         $message = 'تمت إضافة الوحدة بنجاح';
     }
 
