@@ -353,4 +353,110 @@ function addNotification($userId, $title, $message, $type = 'info') {
         return false;
     }
 }
+
+/**
+ * دالة للحصول على معلومات المستخدم الكاملة
+ */
+function getUserFullInfo($userId) {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->prepare("
+            SELECT u.*,
+                   un.name as university_name,
+                   c.name as college_name,
+                   CASE 
+                     WHEN u.role = 'ministry' THEN (SELECT name FROM ministry_departments WHERE id = u.entity_id)
+                     WHEN u.role = 'division' THEN (SELECT name FROM university_divisions WHERE id = u.entity_id)
+                     WHEN u.role = 'unit' THEN (SELECT name FROM units WHERE id = u.entity_id)
+                   END as entity_name
+            FROM users u
+            LEFT JOIN universities un ON u.university_id = un.id
+            LEFT JOIN colleges c ON u.college_id = c.id
+            WHERE u.id = ?
+        ");
+        $stmt->execute([$userId]);
+        $userInfo = $stmt->fetch();
+        
+        if ($userInfo) {
+            // إضافة المعرفات حسب نوع المستخدم
+            switch($userInfo['role']) {
+                case 'ministry':
+                    $userInfo['department_id'] = $userInfo['entity_id'];
+                    $userInfo['department_name'] = $userInfo['entity_name'];
+                    break;
+                case 'division':
+                    $userInfo['division_id'] = $userInfo['entity_id'];
+                    $userInfo['division_name'] = $userInfo['entity_name'];
+                    break;
+                case 'unit':
+                    $userInfo['unit_id'] = $userInfo['entity_id'];
+                    $userInfo['unit_name'] = $userInfo['entity_name'];
+                    break;
+            }
+        }
+        
+        return $userInfo;
+    } catch (PDOException $e) {
+        error_log("خطأ في جلب معلومات المستخدم: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * دالة للحصول على نص الترحيب حسب نوع المستخدم
+ */
+function getWelcomeMessage($userInfo) {
+    if (!$userInfo) return "مرحباً بك في النظام";
+    
+    $welcome = "مرحباً بك ";
+    $welcome .= $userInfo['full_name'];
+    
+    switch ($userInfo['role']) {
+        case 'admin':
+            $welcome .= " - مدير النظام";
+            break;
+        case 'unit':
+            $welcome .= " - رئيس وحدة " . ($userInfo['unit_name'] ?? '');
+            if (!empty($userInfo['college_name'])) {
+                $welcome .= " في " . $userInfo['college_name'];
+            }
+            if (!empty($userInfo['university_name'])) {
+                $welcome .= " - " . $userInfo['university_name'];
+            }
+            break;
+        case 'division':
+            $welcome .= " - رئيس شعبة " . ($userInfo['division_name'] ?? '');
+            if (!empty($userInfo['university_name'])) {
+                $welcome .= " في " . $userInfo['university_name'];
+            }
+            break;
+        case 'ministry':
+            $welcome .= " - " . ($userInfo['department_name'] ?? 'قسم الوزارة');
+            break;
+    }
+    
+    return $welcome;
+}
+
+function getDefaultPermissions($role) {
+    switch($role) {
+        case 'division':
+            return [
+                'view_colleges',     // إضافة صلاحية عرض الكليات
+                'manage_colleges',   // إضافة صلاحية إدارة الكليات
+                'view_units',
+                'manage_units',
+                'add_unit',
+                'edit_unit',
+                'delete_unit',
+                'view_reports',
+                'manage_reports',
+                'add_report',
+                'edit_report',
+                'delete_report'
+            ];
+        // ... rest of the code ...
+    }
+}
 ?>

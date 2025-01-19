@@ -50,7 +50,7 @@ $available_permissions = [
     'edit_correspondence' => 'تعديل مراسلة',
     'delete_correspondence' => 'حذف مراسلة',
     
-    // صلاحيات التقارير
+    // صلاحيات التقا
     'manage_reports' => 'إدارة التقارير',
     'view_reports' => 'عرض التقارير',
     'generate_reports' => 'إنشاء التقارير',
