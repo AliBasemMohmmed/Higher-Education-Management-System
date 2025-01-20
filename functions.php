@@ -459,4 +459,124 @@ function getDefaultPermissions($role) {
         // ... rest of the code ...
     }
 }
+
+/**
+ * دالة للحصول على الصلاحيات الثابتة حسب نوع المستخدم
+ */
+function getRolePermissions($role) {
+    global $pdo;
+    
+    try {
+        // محاولة جلب الصلاحيات المخصصة من قاعدة البيانات
+        $stmt = $pdo->prepare("
+            SELECT permission_name 
+            FROM role_default_permissions 
+            WHERE role = ?
+        ");
+        $stmt->execute([$role]);
+        $customPermissions = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        
+        // إذا وجدت صلاحيات مخصصة، نستخدمها
+        if (!empty($customPermissions)) {
+            return $customPermissions;
+        }
+    } catch (PDOException $e) {
+        error_log("خطأ في جلب الصلاحيات المخصصة: " . $e->getMessage());
+    }
+    
+    // الصلاحيات الافتراضية إذا لم توجد صلاحيات مخصصة
+    $defaultPermissions = [
+        'admin' => [
+            // صلاحيات إدارة المستخدمين
+            'manage_users', 'view_users', 'add_user', 'edit_user', 'delete_user',
+            // صلاحيات إدارة الجامعات
+            'manage_universities', 'view_universities', 'add_university', 'edit_university', 'delete_university',
+            // صلاحيات إدارة الكليات
+            'manage_colleges', 'view_colleges', 'add_college', 'edit_college', 'delete_college',
+            // صلاحيات إدارة الشعب
+            'manage_divisions', 'view_divisions', 'add_division', 'edit_division', 'delete_division',
+            // صلاحيات إدارة الوحدات
+            'manage_units', 'view_units', 'add_unit', 'edit_unit', 'delete_unit',
+            // صلاحيات إدارة التقارير
+            'manage_reports', 'view_reports', 'add_report', 'edit_report', 'delete_report',
+            // صلاحيات النظام
+            'manage_settings', 'view_logs', 'manage_permissions'
+        ],
+        
+        'ministry' => [
+            // صلاحيات الجامعات
+            'view_universities', 'manage_universities',
+            // صلاحيات الكليات
+            'view_colleges',
+            // صلاحيات الشعب
+            'view_divisions',
+            // صلاحيات التقارير
+            'view_reports',
+            // صلاحيات الكتب
+            'manage_documents', 'view_documents', 'add_document', 'edit_document'
+        ],
+        
+        'division' => [
+            // صلاحيات الكليات
+            'view_colleges',
+            // صلاحيات الوحدات
+            'manage_units', 'view_units', 'add_unit', 'edit_unit',
+            // صلاحيات التقارير
+            'manage_reports', 'view_reports',
+            // صلاحيات الكتب
+            'manage_documents', 'view_documents', 'add_document', 'edit_document'
+        ],
+        
+        'unit' => [
+            // صلاحيات التقارير
+            'manage_unit_reports', 'view_unit_reports', 'add_unit_report', 'edit_unit_report',
+            // صلاحيات الكتب
+            'manage_unit_documents', 'view_unit_documents', 'add_unit_document', 'edit_unit_document'
+        ]
+    ];
+    
+    return $defaultPermissions[$role] ?? [];
+}
+
+/**
+ * دالة للتحقق من صلاحيات المستخدم
+ */
+function hasPermission($permission) {
+    // إذا كان المستخدم مدير النظام
+    if (isset($_SESSION['user_role']) && $_SESSION['user_role'] === 'admin') {
+        return true;
+    }
+    
+    // الحصول على صلاحيات دور المستخدم
+    $rolePermissions = getRolePermissions($_SESSION['user_role'] ?? '');
+    
+    return in_array($permission, $rolePermissions);
+}
+
+/**
+ * دالة لتطبيق الصلاحيات عند إنشاء مستخدم جديد
+ */
+function applyRolePermissions($userId, $role) {
+    global $pdo;
+    
+    try {
+        // حذف الصلاحيات القديمة
+        $stmt = $pdo->prepare("DELETE FROM permissions WHERE user_id = ?");
+        $stmt->execute([$userId]);
+        
+        // إضافة الصلاحيات الجديدة
+        $permissions = getRolePermissions($role);
+        if (!empty($permissions)) {
+            $stmt = $pdo->prepare("INSERT INTO permissions (user_id, permission_name) VALUES (?, ?)");
+            foreach ($permissions as $permission) {
+                $stmt->execute([$userId, $permission]);
+            }
+        }
+        
+        return true;
+    } catch (PDOException $e) {
+        error_log("خطأ في تطبيق صلاحيات الدور: " . $e->getMessage());
+        return false;
+    }
+}
 ?>

@@ -25,28 +25,6 @@ function requireAdmin() {
     }
 }
 
-function hasPermission($permission_name) {
-    global $pdo;
-    
-    // المدير لديه جميع الصلاحيات تلقائياً
-    if (isAdmin()) {
-        return true;
-    }
-    
-    try {
-        $stmt = $pdo->prepare("
-            SELECT COUNT(*) 
-            FROM permissions 
-            WHERE user_id = ? AND permission_name = ?
-        ");
-        $stmt->execute([$_SESSION['user_id'], $permission_name]);
-        return $stmt->fetchColumn() > 0;
-    } catch (PDOException $e) {
-        // في حالة حدوث خطأ، نفترض أن المستخدم لا يملك الصلاحية
-        return false;
-    }
-}
-
 // دالة للحصول على جميع صلاحيات المستخدم
 function getUserPermissions($user_id) {
     global $pdo;
