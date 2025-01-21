@@ -11,55 +11,42 @@ if (!isAdmin()) {
     exit('غير مصرح لك بالوصول');
 }
 
-// معالجة تحديث الصلاحيات الافتراضية
+// معالجة تحديث الصلاحيات الافتراضية للأدوار
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_default_permissions'])) {
     try {
         $role = $_POST['role'];
         $permissions = $_POST['permissions'] ?? [];
         
-        // تحديث الصلاحيات في قاعدة البيانات
-        $stmt = $pdo->prepare("
-            INSERT INTO role_default_permissions (role, permission_name)
-            VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE permission_name = VALUES(permission_name)
-        ");
-        
-        // حذف الصلاحيات القديمة
-        $pdo->prepare("DELETE FROM role_default_permissions WHERE role = ?")->execute([$role]);
+        // حذف الصلاحيات القديمة للدور
+        $stmt = $pdo->prepare("DELETE FROM role_default_permissions WHERE role = ?");
+        $stmt->execute([$role]);
         
         // إضافة الصلاحيات الجديدة
-        foreach ($permissions as $permission) {
-            $stmt->execute([$role, $permission]);
+        if (!empty($permissions)) {
+            $stmt = $pdo->prepare("INSERT INTO role_default_permissions (role, permission_name) VALUES (?, ?)");
+            foreach ($permissions as $permission) {
+                $stmt->execute([$role, $permission]);
+            }
         }
         
-        $_SESSION['success'] = "تم تحديث الصلاحيات الافتراضية بنجاح";
-        logSystemActivity("تم تحديث الصلاحيات الافتراضية للدور: $role", 'permissions', $_SESSION['user_id']);
+        $_SESSION['success'] = "تم تحديث صلاحيات الدور بنجاح";
+        logSystemActivity("تم تحديث صلاحيات الدور: $role", 'permissions', $_SESSION['user_id']);
     } catch (Exception $e) {
-        $_SESSION['error'] = "حدث خطأ أثناء تحديث الصلاحيات الافتراضية";
+        $_SESSION['error'] = "حدث خطأ أثناء تحديث الصلاحيات";
         error_log($e->getMessage());
     }
 }
 
-include 'header.php';
-
 // جلب قائمة المستخدمين مع صلاحياتهم
 $users = $pdo->query("
-    SELECT u.*, GROUP_CONCAT(p.permission_name) as current_permissions,
-           COALESCE(ue.entity_type, 'none') as entity_type,
-           CASE 
-               WHEN ue.entity_type = 'division' THEN (
-                   SELECT ud.name 
-                   FROM university_divisions ud 
-                   WHERE ud.id = ue.entity_id
-               )
-               ELSE ''
-           END as entity_name
+    SELECT u.id, u.username, u.full_name, u.role, GROUP_CONCAT(p.permission_name) as current_permissions
     FROM users u 
     LEFT JOIN permissions p ON u.id = p.user_id 
-    LEFT JOIN user_entities ue ON u.id = ue.user_id AND ue.is_primary = 1
     WHERE u.role != 'admin'
-    GROUP BY u.id
+    GROUP BY u.id, u.username, u.full_name, u.role
 ")->fetchAll();
+
+include 'header.php';
 
 // تنظيم الصلاحيات حسب المجموعات
 $permissionGroups = [
@@ -83,6 +70,8 @@ $roles = [
     'division' => 'رئيس شعبة',
     'unit' => 'رئيس وحدة'
 ];
+
+$roleLabels = $roles; // للاستخدام في عرض الأدوار
 ?>
 
 <style>
@@ -365,7 +354,7 @@ body {
     <div class="page-header">
         <h2>
             <i class="fas fa-shield-alt ml-2"></i>
-            إدارة صلاحيات المستخدمين
+            إدارة صلاحيات الأدوار والمستخدمين
         </h2>
     </div>
 
@@ -471,7 +460,6 @@ body {
                     <tr>
                         <th>المستخدم</th>
                         <th>الدور</th>
-                        <th>الانتماء الرئيسي</th>
                         <th>الصلاحيات</th>
                     </tr>
                 </thead>
@@ -481,23 +469,13 @@ body {
                         <td>
                             <div class="d-flex align-items-center">
                                 <i class="fas fa-user-circle ml-2 text-primary"></i>
-                                <?php echo htmlspecialchars($user['full_name']); ?>
+                                <?php echo htmlspecialchars($user['full_name'] ?? $user['username']); ?>
                             </div>
                         </td>
                         <td>
                             <span class="badge bg-<?php echo getRoleBadgeColor($user['role']); ?>">
                                 <?php echo $roleLabels[$user['role']] ?? $user['role']; ?>
                             </span>
-                        </td>
-                        <td>
-                            <?php if ($user['entity_type'] !== 'none'): ?>
-                                <div class="d-flex align-items-center">
-                                    <i class="fas <?php echo getEntityIcon($user['entity_type']); ?> ml-2"></i>
-                                    <?php echo htmlspecialchars($user['entity_type'] . ': ' . $user['entity_name']); ?>
-                                </div>
-                            <?php else: ?>
-                                <span class="text-muted">لا يوجد</span>
-                            <?php endif; ?>
                         </td>
                         <td>
                             <button type="button" 
@@ -517,7 +495,7 @@ body {
                                 <div class="modal-header">
                                     <h5 class="modal-title">
                                         <i class="fas fa-shield-alt ml-2"></i>
-                                        صلاحيات: <?php echo htmlspecialchars($user['full_name']); ?>
+                                        صلاحيات: <?php echo htmlspecialchars($user['full_name'] ?? $user['username']); ?>
                                     </h5>
                                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                 </div>
