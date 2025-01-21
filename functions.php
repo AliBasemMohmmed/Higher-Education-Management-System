@@ -1,6 +1,21 @@
 <?php
 require_once 'config.php';
 
+try {
+    $pdo = new PDO(
+        "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4",
+        $db_user,
+        $db_pass,
+        array(
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+        )
+    );
+} catch(PDOException $e) {
+    die('خطأ في الاتصال بقاعدة البيانات: ' . $e->getMessage());
+}
+
 // دالة إضافة قسم جديد
 function addMinistryDepartment($name, $description) {
   global $pdo;
@@ -515,5 +530,77 @@ function applyRolePermissions($userId, $role) {
         error_log("خطأ في تطبيق صلاحيات الدور: " . $e->getMessage());
         return false;
     }
+}
+
+// دالة لتنظيف مخرجات JSON
+function cleanJsonOutput($data) {
+    if (is_string($data)) {
+        // تحويل النص إلى UTF-8 مع التأكد من عدم وجود BOM
+        $clean = trim(mb_convert_encoding($data, 'UTF-8', 'UTF-8'));
+        // إزالة أي أحرف تحكم غير مرئية
+        $clean = preg_replace('/[\x00-\x1F\x7F]/u', '', $clean);
+        return $clean;
+    } elseif (is_array($data)) {
+        return array_map('cleanJsonOutput', $data);
+    } elseif (is_object($data)) {
+        $cleaned = new stdClass();
+        foreach ($data as $key => $value) {
+            $cleaned->$key = cleanJsonOutput($value);
+        }
+        return $cleaned;
+    }
+    return $data;
+}
+
+// دالة لإرسال استجابة JSON
+function sendJsonResponse($data, $status = 200) {
+    // تنظيف البيانات قبل الإرسال
+    $cleanData = cleanJsonOutput($data);
+    
+    // إعداد الترويسات
+    header('Content-Type: application/json; charset=utf-8');
+    header("Cache-Control: no-cache, must-revalidate");
+    http_response_code($status);
+    
+    // محاولة ترميز JSON
+    $json = json_encode($cleanData, 
+        JSON_UNESCAPED_UNICODE | 
+        JSON_UNESCAPED_SLASHES | 
+        JSON_PARTIAL_OUTPUT_ON_ERROR |
+        JSON_INVALID_UTF8_IGNORE
+    );
+    
+    // التحقق من وجود أخطاء في الترميز
+    if ($json === false) {
+        error_log('JSON encoding error: ' . json_last_error_msg());
+        // إرسال رسالة خطأ عامة في حالة فشل الترميز
+        echo json_encode([
+            'success' => false,
+            'message' => 'حدث خطأ في معالجة البيانات'
+        ], JSON_UNESCAPED_UNICODE);
+    } else {
+        echo $json;
+    }
+    exit;
+}
+
+// دالة لإنشاء معرف فريد للكتاب
+function generateUniqueDocumentId() {
+    global $pdo;
+    
+    do {
+        // إنشاء معرف من السنة الحالية ورقم تسلسلي
+        $year = date('Y');
+        $number = mt_rand(1000, 9999);
+        $documentId = $year . '/' . $number;
+        
+        // التحقق من عدم وجود هذا المعرف مسبقاً
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM documents WHERE document_id = ?");
+        $stmt->execute([$documentId]);
+        $exists = $stmt->fetchColumn();
+        
+    } while ($exists > 0);
+    
+    return $documentId;
 }
 ?>

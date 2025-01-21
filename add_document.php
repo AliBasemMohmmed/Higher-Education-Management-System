@@ -3,42 +3,12 @@ require_once 'functions.php';
 require_once 'auth.php';
 requireLogin();
 
-// التحقق من وجود معرف الكتاب
-$id = $_GET['id'] ?? null;
-if (!$id) {
-    die('معرف الكتاب غير صحيح');
-}
-
 // التحقق من الصلاحيات
-if (!hasPermission('edit_document')) {
-    die('ليس لديك صلاحية لتعديل الكتب');
+if (!hasPermission('add_document')) {
+    die('ليس لديك صلاحية لإضافة كتب جديدة');
 }
 
-// جلب بيانات الكتاب
-$stmt = $pdo->prepare("
-    SELECT d.*, 
-        CASE 
-            WHEN d.sender_type = 'ministry' THEN (SELECT name FROM ministry_departments WHERE id = d.sender_id)
-            WHEN d.sender_type = 'division' THEN (SELECT name FROM university_divisions WHERE id = d.sender_id)
-            WHEN d.sender_type = 'unit' THEN (SELECT name FROM units WHERE id = d.sender_id)
-        END as sender_name,
-        CASE 
-            WHEN d.receiver_type = 'ministry' THEN (SELECT name FROM ministry_departments WHERE id = d.receiver_id)
-            WHEN d.receiver_type = 'division' THEN (SELECT name FROM university_divisions WHERE id = d.receiver_id)
-            WHEN d.receiver_type = 'unit' THEN (SELECT name FROM units WHERE id = d.receiver_id)
-        END as receiver_name
-    FROM documents d
-    WHERE d.id = ?
-");
-
-$stmt->execute([$id]);
-$document = $stmt->fetch();
-
-if (!$document) {
-    die('الكتاب غير موجود');
-}
-
-// معالجة تحديث البيانات
+// معالجة إرسال النموذج
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         // التحقق من البيانات المطلوبة
@@ -54,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $receiverId = $_POST['receiver_id'];
 
         // معالجة الملف المرفق
-        $filePath = $document['file_path'];
+        $filePath = null;
         if (isset($_FILES['document_file']) && $_FILES['document_file']['error'] === UPLOAD_ERR_OK) {
             $allowedTypes = getAllowedFileTypes();
             $fileType = $_FILES['document_file']['type'];
@@ -74,11 +44,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 mkdir($uploadDir, 0777, true);
             }
 
-            // حذف الملف القديم إذا وجد
-            if ($document['file_path'] && file_exists($document['file_path'])) {
-                unlink($document['file_path']);
-            }
-
             $filePath = $uploadDir . uniqid() . '_' . $fileName;
             
             if (!move_uploaded_file($_FILES['document_file']['tmp_name'], $filePath)) {
@@ -86,42 +51,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // تحديث بيانات الكتاب
+        // إضافة الكتاب إلى قاعدة البيانات
         $pdo->beginTransaction();
 
+        // إنشاء معرف فريد للكتاب
+        $documentId = generateUniqueDocumentId();
+
         $stmt = $pdo->prepare("
-            UPDATE documents 
-            SET title = ?, content = ?, file_path = ?,
-                sender_type = ?, sender_id = ?,
-                receiver_type = ?, receiver_id = ?,
-                document_id = COALESCE(document_id, ?),
-                updated_at = NOW()
-            WHERE id = ?
+            INSERT INTO documents (
+                document_id, title, content, file_path, 
+                sender_type, sender_id, 
+                receiver_type, receiver_id,
+                status, created_at, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW(), ?)
         ");
 
-        // إنشاء معرف فريد للكتاب إذا لم يكن موجوداً
-        $documentId = $document['document_id'] ?? generateUniqueDocumentId();
-
         $stmt->execute([
-            $title, $content, $filePath,
+            $documentId, $title, $content, $filePath,
             $senderType, $senderId,
             $receiverType, $receiverId,
-            $documentId,
-            $id
+            $_SESSION['user_id']
         ]);
+
+        $documentId = $pdo->lastInsertId();
 
         // إضافة سجل في التاريخ
         $stmt = $pdo->prepare("
             INSERT INTO document_history (document_id, user_id, action, notes)
-            VALUES (?, ?, 'edit', 'تم تعديل الكتاب')
+            VALUES (?, ?, 'create', 'تم إنشاء الكتاب')
         ");
-        $stmt->execute([$id, $_SESSION['user_id']]);
+        $stmt->execute([$documentId, $_SESSION['user_id']]);
 
-        // جلب معلومات المرسل والمستلم الجديد
+        // جلب معلومات المرسل
         $senderName = '';
-        $receiverName = '';
-
-        // جلب اسم المرسل
         switch ($senderType) {
             case 'ministry':
                 $stmt = $pdo->prepare("SELECT name FROM ministry_departments WHERE id = ?");
@@ -139,53 +101,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $senderName = $sender['name'] ?? 'غير معروف';
         }
 
-        // جلب اسم المستلم
-        switch ($receiverType) {
-            case 'ministry':
-                $stmt = $pdo->prepare("SELECT name FROM ministry_departments WHERE id = ?");
-                break;
-            case 'division':
-                $stmt = $pdo->prepare("SELECT name FROM university_divisions WHERE id = ?");
-                break;
-            case 'unit':
-                $stmt = $pdo->prepare("SELECT name FROM units WHERE id = ?");
-                break;
-        }
-        if ($stmt) {
-            $stmt->execute([$receiverId]);
-            $receiver = $stmt->fetch();
-            $receiverName = $receiver['name'] ?? 'غير معروف';
-        }
+        // إرسال إشعار للجهة المستلمة
+        // جلب المستخدمين المرتبطين بالجهة المستلمة
+        $stmt = $pdo->prepare("
+            SELECT DISTINCT u.id 
+            FROM users u 
+            JOIN user_entities ue ON u.id = ue.user_id 
+            WHERE ue.entity_type = ? AND ue.entity_id = ?
+            AND u.role IN ('unit_head', 'division_head', 'department_head') -- فقط رؤساء الوحدات والشعب والأقسام
+        ");
+        $stmt->execute([$receiverType, $receiverId]);
+        $users = $stmt->fetchAll();
 
-        // إرسال إشعار للجهة المستلمة الجديدة
-        if ($receiverType != $document['receiver_type'] || $receiverId != $document['receiver_id']) {
+        foreach ($users as $user) {
+            // إدخال الإشعار في قاعدة البيانات
             $stmt = $pdo->prepare("
-                SELECT DISTINCT u.id 
-                FROM users u 
-                JOIN user_entities ue ON u.id = ue.user_id 
-                WHERE ue.entity_type = ? AND ue.entity_id = ?
+                INSERT INTO notifications (
+                    sender_id, receiver_id, title, message, 
+                    type, entity_id, is_read, icon, color
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ?, ?, 0, 'fas fa-envelope', 'primary'
+                )
             ");
-            $stmt->execute([$receiverType, $receiverId]);
-            $users = $stmt->fetchAll();
 
-            foreach ($users as $user) {
-                addNotification(
-                    $user['id'],
-                    'تم تحويل كتاب إليك',
-                    "تم تحويل الكتاب: $title من $senderName",
-                    [
-                        'type' => 'document',
-                        'document_id' => $id,
-                        'action' => 'transfer'
-                    ]
-                );
-            }
+            $notificationTitle = "كتاب جديد";
+            $notificationMessage = "تم استلام كتاب جديد بعنوان: $title من $senderName";
+
+            $stmt->execute([
+                $_SESSION['user_id'],  // sender_id (المستخدم الحالي)
+                $user['id'],           // receiver_id
+                $notificationTitle,     // title
+                $notificationMessage,   // message
+                $receiverType,         // type (نوع الجهة المستلمة)
+                $receiverId            // entity_id (معرف الجهة المستلمة)
+            ]);
         }
 
         $pdo->commit();
 
         // إعادة التوجيه إلى صفحة عرض الكتاب
-        header("Location: view_document.php?id=$id&success=1");
+        header("Location: view_document.php?id=$documentId&success=1");
         exit;
 
     } catch (Exception $e) {
@@ -259,8 +215,8 @@ include 'header.php';
         <div class="card form-card">
             <div class="card-header bg-primary text-white">
                 <h3 class="mb-0">
-                    <i class="fas fa-edit me-2"></i>
-                    تعديل الكتاب
+                    <i class="fas fa-plus-circle me-2"></i>
+                    إضافة كتاب جديد
                 </h3>
             </div>
             <div class="card-body">
@@ -274,16 +230,13 @@ include 'header.php';
                 <form method="POST" enctype="multipart/form-data" class="needs-validation" novalidate>
                     <div class="mb-3">
                         <label class="form-label">عنوان الكتاب</label>
-                        <input type="text" name="title" class="form-control" required
-                               value="<?php echo htmlspecialchars($document['title']); ?>">
+                        <input type="text" name="title" class="form-control" required>
                         <div class="invalid-feedback">يرجى إدخال عنوان الكتاب</div>
                     </div>
 
                     <div class="mb-3">
                         <label class="form-label">محتوى الكتاب</label>
-                        <textarea name="content" class="form-control" rows="5" required><?php 
-                            echo htmlspecialchars($document['content']); 
-                        ?></textarea>
+                        <textarea name="content" class="form-control" rows="5" required></textarea>
                         <div class="invalid-feedback">يرجى إدخال محتوى الكتاب</div>
                     </div>
 
@@ -292,9 +245,9 @@ include 'header.php';
                             <label class="form-label">نوع المرسل</label>
                             <select name="sender_type" class="form-select" required>
                                 <option value="">اختر نوع المرسل</option>
-                                <option value="ministry" <?php echo $document['sender_type'] == 'ministry' ? 'selected' : ''; ?>>قسم الوزارة</option>
-                                <option value="division" <?php echo $document['sender_type'] == 'division' ? 'selected' : ''; ?>>شعبة</option>
-                                <option value="unit" <?php echo $document['sender_type'] == 'unit' ? 'selected' : ''; ?>>وحدة</option>
+                                <option value="ministry">قسم الوزارة</option>
+                                <option value="division">شعبة</option>
+                                <option value="unit">وحدة</option>
                             </select>
                         </div>
                         <div class="col-md-6">
@@ -311,9 +264,9 @@ include 'header.php';
                             <label class="form-label">نوع المستلم</label>
                             <select name="receiver_type" class="form-select" required>
                                 <option value="">اختر نوع المستلم</option>
-                                <option value="ministry" <?php echo $document['receiver_type'] == 'ministry' ? 'selected' : ''; ?>>قسم الوزارة</option>
-                                <option value="division" <?php echo $document['receiver_type'] == 'division' ? 'selected' : ''; ?>>شعبة</option>
-                                <option value="unit" <?php echo $document['receiver_type'] == 'unit' ? 'selected' : ''; ?>>وحدة</option>
+                                <option value="ministry">قسم الوزارة</option>
+                                <option value="division">شعبة</option>
+                                <option value="unit">وحدة</option>
                             </select>
                         </div>
                         <div class="col-md-6">
@@ -327,16 +280,7 @@ include 'header.php';
 
                     <div class="mb-3">
                         <label class="form-label">الملف المرفق</label>
-                        <?php if ($document['file_path']): ?>
-                        <div class="mb-2">
-                            <small class="text-muted">الملف الحالي:</small>
-                            <a href="<?php echo htmlspecialchars($document['file_path']); ?>" target="_blank">
-                                عرض الملف الحالي
-                            </a>
-                        </div>
-                        <?php endif; ?>
-                        <input type="file" name="document_file" class="form-control" 
-                               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">
+                        <input type="file" name="document_file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">
                         <small class="text-muted">
                             الملفات المسموح بها: PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG
                             (الحد الأقصى: <?php echo formatFileSize(getMaxFileSize()); ?>)
@@ -344,10 +288,10 @@ include 'header.php';
                     </div>
 
                     <div class="text-end">
-                        <a href="view_document.php?id=<?php echo $id; ?>" class="btn btn-secondary me-2">إلغاء</a>
+                        <a href="documents.php" class="btn btn-secondary me-2">إلغاء</a>
                         <button type="submit" class="btn btn-primary submit-btn">
                             <i class="fas fa-save me-2"></i>
-                            حفظ التغييرات
+                            حفظ الكتاب
                         </button>
                     </div>
                 </form>
@@ -373,7 +317,7 @@ include 'header.php';
 })();
 
 // تحديث قوائم المرسل والمستلم
-async function updateEntityList(type, targetSelect, selectedId = null) {
+async function updateEntityList(type, targetSelect) {
     try {
         const response = await fetch(`get_entities.php?type=${type}`);
         const data = await response.json();
@@ -384,9 +328,6 @@ async function updateEntityList(type, targetSelect, selectedId = null) {
                 const option = document.createElement('option');
                 option.value = entity.id;
                 option.textContent = entity.name;
-                if (selectedId && entity.id == selectedId) {
-                    option.selected = true;
-                }
                 targetSelect.appendChild(option);
             });
         }
@@ -395,28 +336,13 @@ async function updateEntityList(type, targetSelect, selectedId = null) {
     }
 }
 
-// تحديث القوائم عند تحميل الصفحة
-document.addEventListener('DOMContentLoaded', function() {
-    const senderType = document.querySelector('[name="sender_type"]');
-    const senderId = document.querySelector('[name="sender_id"]');
-    const receiverType = document.querySelector('[name="receiver_type"]');
-    const receiverId = document.querySelector('[name="receiver_id"]');
+// ربط الأحداث بتغيير نوع المرسل والمستلم
+document.querySelector('[name="sender_type"]').addEventListener('change', function() {
+    updateEntityList(this.value, document.querySelector('[name="sender_id"]'));
+});
 
-    if (senderType.value) {
-        updateEntityList(senderType.value, senderId, '<?php echo $document['sender_id']; ?>');
-    }
-    if (receiverType.value) {
-        updateEntityList(receiverType.value, receiverId, '<?php echo $document['receiver_id']; ?>');
-    }
-
-    // ربط الأحداث بتغيير نوع المرسل والمستلم
-    senderType.addEventListener('change', function() {
-        updateEntityList(this.value, senderId);
-    });
-
-    receiverType.addEventListener('change', function() {
-        updateEntityList(this.value, receiverId);
-    });
+document.querySelector('[name="receiver_type"]').addEventListener('change', function() {
+    updateEntityList(this.value, document.querySelector('[name="receiver_id"]'));
 });
 </script>
 

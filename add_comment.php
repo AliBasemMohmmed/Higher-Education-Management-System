@@ -3,8 +3,6 @@ require_once 'functions.php';
 require_once 'auth.php';
 requireLogin();
 
-header('Content-Type: application/json');
-
 try {
     // التحقق من الصلاحيات
     if (!hasPermission('add_comments')) {
@@ -67,7 +65,7 @@ try {
 
     $pdo->commit();
 
-    echo json_encode([
+    sendJsonResponse([
         'success' => true,
         'message' => 'تم إضافة التعليق بنجاح'
     ]);
@@ -77,9 +75,8 @@ try {
         $pdo->rollBack();
     }
     
-    http_response_code(400);
-    echo json_encode([
+    sendJsonResponse([
         'success' => false,
         'message' => $e->getMessage()
-    ]);
+    ], 400);
 } 

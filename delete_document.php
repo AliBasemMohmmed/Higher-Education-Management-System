@@ -3,16 +3,13 @@ require_once 'functions.php';
 require_once 'auth.php';
 requireLogin();
 
-header('Content-Type: application/json');
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // قراءة البيانات من الطلب
     $data = json_decode(file_get_contents('php://input'), true);
     $id = $data['id'] ?? null;
 
     if (!$id) {
-        echo json_encode(['success' => false, 'message' => 'معرف الوثيقة مطلوب']);
-        exit;
+        sendJsonResponse(['success' => false, 'message' => 'معرف الوثيقة مطلوب'], 400);
     }
 
     try {
@@ -38,17 +35,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $pdo->commit();
-        echo json_encode(['success' => true, 'message' => 'تم حذف الوثيقة بنجاح']);
+        sendJsonResponse(['success' => true, 'message' => 'تم حذف الوثيقة بنجاح']);
 
     } catch (Exception $e) {
         $pdo->rollBack();
-        http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        sendJsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
     }
-    exit;
 }
 
 // إذا لم تكن الطريقة POST
-http_response_code(405);
-echo json_encode(['success' => false, 'message' => 'طريقة طلب غير صحيحة']);
-exit; 
+sendJsonResponse(['success' => false, 'message' => 'طريقة طلب غير صحيحة'], 405); 

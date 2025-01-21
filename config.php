@@ -1,15 +1,36 @@
 <?php
-// تعريف ثوابت الاتصال بقاعدة البيانات
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'education_system');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// إعدادات قاعدة البيانات
+$db_host = 'localhost';     // عنوان خادم قاعدة البيانات
+$db_name = 'education_system';    // اسم قاعدة البيانات
+$db_user = 'root';         // اسم المستخدم
+$db_pass = '';             // كلمة المرور
+
+// إعدادات النظام
+define('SITE_NAME', 'نظام إدارة التعليم العالي');
+define('UPLOAD_DIR', 'uploads/');
+define('MAX_FILE_SIZE', 10 * 1024 * 1024); // 10 ميجابايت
+
+// إعدادات الجلسة
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+ini_set('session.cookie_secure', isset($_SERVER['HTTPS']));
+
+// المنطقة الزمنية
+date_default_timezone_set('Asia/Baghdad');
+
+// تكوين عرض الأخطاء
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// ترميز UTF-8
+mb_internal_encoding('UTF-8');
+mb_http_output('UTF-8');
 
 try {
     $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
+        "mysql:host=" . $db_host . ";dbname=" . $db_name . ";charset=utf8mb4",
+        $db_user,
+        $db_pass,
         [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

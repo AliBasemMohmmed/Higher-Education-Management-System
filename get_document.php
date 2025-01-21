@@ -3,8 +3,6 @@ require_once 'functions.php';
 require_once 'auth.php';
 requireLogin();
 
-header('Content-Type: application/json');
-
 try {
     $id = $_GET['id'] ?? null;
     if (!$id) {
@@ -44,15 +42,14 @@ try {
     $stmt->execute([$id]);
     $document['attachments'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    echo json_encode([
+    sendJsonResponse([
         'success' => true,
         'data' => $document
     ]);
 
 } catch (Exception $e) {
-    http_response_code(400);
-    echo json_encode([
+    sendJsonResponse([
         'success' => false,
-        'error' => $e->getMessage()
-    ]);
+        'message' => $e->getMessage()
+    ], 400);
 }
