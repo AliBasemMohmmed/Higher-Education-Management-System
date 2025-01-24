@@ -172,6 +172,10 @@ $documents = $stmt->fetchAll();
                             <i class="fas fa-eye"></i>
                             عرض
                         </a>
+                        <a href="document_workflow.php?id=<?php echo $doc['id']; ?>" class="btn action-button workflow">
+                            <i class="fas fa-project-diagram"></i>
+                            مسار العمل
+                        </a>
                         <?php if (hasPermission('edit_document')): ?>
                         <a href="edit_document.php?id=<?php echo $doc['id']; ?>" class="btn action-button edit">
                             <i class="fas fa-edit"></i>

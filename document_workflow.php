@@ -27,10 +27,7 @@ $document = $pdo->prepare("
     u.email as processor_email,
     d.created_at as document_date,
     d.updated_at as last_update,
-    d.priority,
-    d.deadline,
-    d.tags,
-    d.reference_number
+    d.priority
   FROM documents d
   LEFT JOIN users u ON d.processor_id = u.id
   WHERE d.id = ?
@@ -113,7 +110,7 @@ include 'header.php';
         <div class="card-body">
           <div class="row mb-3">
             <div class="col-md-6">
-              <strong>رقم الإشارة:</strong> <?php echo $doc['reference_number']; ?>
+              <strong>رقم الكتاب:</strong> <?php echo $doc['document_id']; ?>
             </div>
             <div class="col-md-6">
               <strong>تاريخ الإنشاء:</strong> <?php echo formatDate($doc['document_date']); ?>
@@ -135,15 +132,8 @@ include 'header.php';
               </span>
             </div>
             <div class="col-md-6">
-              <strong>الموعد النهائي:</strong>
-              <?php if ($doc['deadline']): ?>
-                <?php echo formatDate($doc['deadline']); ?>
-                <?php if (strtotime($doc['deadline']) < time()): ?>
-                  <span class="badge bg-danger">متأخر</span>
-                <?php endif; ?>
-              <?php else: ?>
-                غير محدد
-              <?php endif; ?>
+              <strong>تاريخ الإرسال:</strong>
+              <?php echo $doc['send_date'] ? formatDate($doc['send_date']) : 'لم يتم الإرسال بعد'; ?>
             </div>
           </div>
           <div class="mb-3">
@@ -152,6 +142,14 @@ include 'header.php';
               <?php echo nl2br($doc['content']); ?>
             </div>
           </div>
+          <?php if ($doc['send_notes']): ?>
+            <div class="mb-3">
+              <strong>ملاحظات الإرسال:</strong>
+              <div class="mt-2">
+                <?php echo nl2br($doc['send_notes']); ?>
+              </div>
+            </div>
+          <?php endif; ?>
           <?php if ($doc['tags']): ?>
             <div class="mb-3">
               <strong>الوسوم:</strong>
@@ -338,7 +336,7 @@ include 'header.php';
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <form id="processForm" action="process_document_action.php" method="POST">
+        <form id="processForm">
           <input type="hidden" name="document_id" value="<?php echo $doc['id']; ?>">
           <div class="mb-3">
             <label class="form-label">الإجراء</label>
@@ -369,7 +367,7 @@ include 'header.php';
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <form id="attachmentForm" action="add_attachment.php" method="POST" enctype="multipart/form-data">
+        <form id="attachmentForm" enctype="multipart/form-data">
           <input type="hidden" name="document_id" value="<?php echo $doc['id']; ?>">
           <div class="mb-3">
             <label class="form-label">الملف</label>
@@ -386,69 +384,158 @@ include 'header.php';
   </div>
 </div>
 
-<?php include 'footer.php'; ?>
+<style>
+.timeline {
+  position: relative;
+  padding: 20px 0;
+}
+
+.timeline-item {
+  position: relative;
+  padding-left: 30px;
+  margin-bottom: 20px;
+}
+
+.timeline-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #007bff;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px #007bff;
+}
+
+.timeline-item:before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  bottom: -20px;
+  width: 2px;
+  background-color: #007bff;
+}
+
+.timeline-item:last-child:before {
+  display: none;
+}
+
+.comment-item {
+  padding: 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.comment-item:last-child {
+  border-bottom: none;
+}
+
+.document-content {
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+</style>
 
 <script>
-// تحديث الصفحة في الوقت الفعلي
-const documentId = <?php echo $doc['id']; ?>;
-const evtSource = new EventSource(`realtime_notifications.php?document_id=${documentId}`);
-
-evtSource.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  if (data.type === 'document_update' && data.id === documentId) {
-    location.reload();
-  }
-};
-
-// دوال المساعدة
-function editDocument(id) {
-  window.location.href = `edit_document.php?id=${id}`;
-}
-
-function deleteAttachment(id) {
-  if (confirm('هل أنت متأكد من حذف هذا المرفق؟')) {
-    fetch(`delete_attachment.php?id=${id}`, {
-      method: 'POST'
-    }).then(response => {
-      if (response.ok) {
-        location.reload();
-      }
-    });
-  }
-}
-
-// معالجة النماذج
-document.getElementById('processForm').addEventListener('submit', function(e) {
-  e.preventDefault();
-  const formData = new FormData(this);
-  
-  fetch(this.action, {
-    method: 'POST',
-    body: formData
-  }).then(response => {
-    if (response.ok) {
-      location.reload();
-    }
-  });
-});
-
-document.getElementById('commentForm').addEventListener('submit', function(e) {
+// معالجة نموذج التعليقات
+document.getElementById('commentForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const content = this.querySelector('textarea').value;
   
-  fetch('add_comment.php', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      document_id: documentId,
-      content: content
-    })
-  }).then(response => {
+  try {
+    const response = await fetch('add_comment.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        document_id: <?php echo $doc['id']; ?>,
+        content: content
+      })
+    });
+    
     if (response.ok) {
       location.reload();
+    } else {
+      throw new Error('فشل إضافة التعليق');
     }
-  });
+  } catch (error) {
+    alert(error.message);
+  }
 });
+
+// معالجة نموذج المرفقات
+document.getElementById('attachmentForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  
+  try {
+    const response = await fetch('add_attachment.php', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (response.ok) {
+      location.reload();
+    } else {
+      throw new Error('فشل رفع المرفق');
+    }
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+// معالجة نموذج معالجة الكتاب
+document.getElementById('processForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  
+  try {
+    const response = await fetch('process_document.php', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (response.ok) {
+      location.reload();
+    } else {
+      throw new Error('فشل معالجة الكتاب');
+    }
+  } catch (error) {
+    alert(error.message);
+  }
+});
+
+// دالة حذف المرفق
+async function deleteAttachment(id) {
+  if (!confirm('هل أنت متأكد من حذف هذا المرفق؟')) return;
+  
+  try {
+    const response = await fetch('delete_attachment.php', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ id: id })
+    });
+    
+    if (response.ok) {
+      location.reload();
+    } else {
+      throw new Error('فشل حذف المرفق');
+    }
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+// دالة تعديل الكتاب
+function editDocument(id) {
+  window.location.href = `edit_document.php?id=${id}`;
+}
 </script>
+
+<?php include 'footer.php'; ?>
